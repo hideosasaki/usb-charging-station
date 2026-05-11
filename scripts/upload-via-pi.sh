@@ -5,12 +5,18 @@
 #   ./scripts/upload-via-pi.sh [<path/to/firmware.uf2>]
 # Config:
 #   PI_HOST is read from .env (project root) or environment.
+#   PIO_ENV selects which PlatformIO env's UF2 to upload when no
+#   explicit path is given (defaults to waveshare_rp2040_zero).
 #   Example: PI_HOST=pi-zero (must match an entry in ~/.ssh/config)
 set -euo pipefail
 
 . "$(dirname "$0")/common.sh"
 
-FW="${1:-$PROJECT_DIR/.pio/build/waveshare_rp2040_zero/firmware.uf2}"
+# The default here must match the env name in platformio.ini. If the
+# env is ever renamed, update both files (and Makefile) together —
+# otherwise this script silently falls back to a stale build path.
+PIO_ENV="${PIO_ENV:-waveshare_rp2040_zero}"
+FW="${1:-$PROJECT_DIR/.pio/build/$PIO_ENV/firmware.uf2}"
 PI_TMP="/tmp/usb-charging-station.uf2"
 
 if [ ! -f "$FW" ]; then
