@@ -125,7 +125,7 @@ layout end-to-end without any real hardware.
 | GP8  | GPIO out     | ILI9341 CS                                   |
 | GP14 | GPIO out     | ILI9341 DC                                   |
 | GP15 | PWM          | ILI9341 backlight (LED)                      |
-| GP16 | WS2812 DIN   | On-board WS2812B status LED                  |
+| GP16 | WS2812 DIN   | On-board WS2812B (hue-sweep heartbeat, dimmest)|
 | 3V3  | Power out    | ILI9341 VCC, ILI9341 RST (tied high)         |
 | GND  | Ground       |                                              |
 

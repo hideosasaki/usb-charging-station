@@ -42,6 +42,11 @@ struct PortReading {
   bool has_c()        const { return has(Rail::UsbC); }
   bool has_a()        const { return has(Rail::UsbA); }
   bool attached()     const { return rail_mask != 0; }
+  // A real fault: I²C transport or stale sample. NotPresent is normal
+  // (port empty / chip not wired in the partial-build phase).
+  bool is_fault()     const {
+    return err != PortError::Ok && err != PortError::NotPresent;
+  }
 
   uint16_t i_mA(Rail rail) const {
     return rail == Rail::UsbC ? i_c_mA : i_a_mA;
