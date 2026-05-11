@@ -338,6 +338,17 @@ GP16 に接続された RGB LED でシステム状態を表示:
 - dimitar 版 SW35xx_lib で電圧・電流・プロトコル取得確認
 - 液晶に Port 1 の情報表示
 
+ソフト側のドライバ層は実機到着前に先行実装済み (2026-05-11):
+
+- dimitar 版 SW35xx_lib を `lib/SW35xx/` に vendoring (upstream 消失耐性)
+- `Sw3518PortReader` (`src/sw3518_port_reader.{h,cpp}`) が `PortReader`
+  契約を満たす形で実装、`make_port_reader(0)` で SW3518 #1 を返す
+- `WireI2CWrapper` (`src/wire_i2c_wrapper.h`) が `TwoWire` を SW35xx_lib
+  の `I2CInterface` に被せ、`begin()` で SDA/SCL/100kHz を一括設定
+- 新 env `waveshare_rp2040_zero_hw` で `USE_MOCK_PORTS=0` ビルドが通る
+  (`make build-hw` / `make upload-hw`)
+- 実機到着後の作業は配線 + フラッシュ + シリアル目視のみ
+
 ### Phase 3: 2 ポート構成 (HW I²C ×2)
 
 - SW3518 #2 を HW I²C #1 (GP2/GP3) に追加
