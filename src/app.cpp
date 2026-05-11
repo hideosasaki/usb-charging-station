@@ -1,5 +1,7 @@
-// Controller: pulls a sample from each PortReader once per second, feeds
-// it into the model layer, then hands snapshots to the View.
+// Controller: pulls a sample from each PortReader every kSampleMs, feeds
+// it into the model layer, and re-renders the View on every tick so the
+// View's diff cache pushes any state change to the panel without waiting
+// for the next sample.
 
 #include "app.h"
 
@@ -24,10 +26,10 @@ namespace {
 
 constexpr uint8_t  kWs2812Pin     = 16;
 constexpr uint16_t kWs2812Count   = 1;
-constexpr uint32_t kSampleMs      = 1000;
 constexpr uint32_t kLedTickMs     = 10;       // 100 Hz refresh: keeps dither above flicker fusion
 constexpr uint32_t kHueCycleMs    = 10000;    // hue sweep period (full wheel)
 constexpr uint32_t kErrBlinkMs    = 1000;     // I²C-error blink period (500 ms on, 500 ms off)
+constexpr uint32_t kLogIntervalMs = 1000;     // Per-sample tracing is too noisy at 10 Hz; throttle to once a second.
 constexpr uint8_t  kPorts         = 3;
 constexpr uint8_t  kRailsPerPort  = 2;
 
@@ -43,9 +45,16 @@ DisplayUi    ui;
 constexpr uint8_t kLedMax = 1;      // 8-bit minimum; dimmest light WS2812B can emit
 uint32_t last_sample_ms = 0;
 uint32_t last_led_ms    = 0;
+uint32_t last_log_ms    = 0;
 bool     g_led_err      = false;     // latest sample saw any I²C fault
 int16_t  g_err_r = 0, g_err_g = 0, g_err_b = 0;
 uint32_t g_last_rgb = 0xFFFFFFFFu;   // sentinel forces first paint
+
+// Latest model snapshot — populated by the sampling tick, consumed by
+// every render tick so the View can repaint without waiting for the
+// next sample.
+PortSnapshot g_snap[kPorts]{};
+uint32_t     g_total_mW = 0;
 
 // At brightness 1, mixed colors (e.g. yellow = R+G half-on) would round
 // to a single primary or to zero, so each channel is dithered
@@ -93,6 +102,43 @@ const char* err_name(PortError e) {
   return "?";
 }
 
+void sample_tick(uint32_t now) {
+  uint32_t dt_ms = now - last_sample_ms;
+  last_sample_ms = now;
+  bool any_err   = false;
+  uint32_t total_mW = 0;
+  bool log_due = Serial && (now - last_log_ms >= kLogIntervalMs);
+
+  for (uint8_t i = 0; i < kPorts; ++i) {
+    PortReading r = readers[i] ? readers[i]->read(now) : PortReading{};
+    history[i].push(to_sample(r));
+    if (r.is_fault()) any_err = true;
+
+    for (Rail rail : kRails) {
+      uint8_t idx = (uint8_t)rail;
+      session_update(session[i][idx], r, rail, dt_ms);
+      g_snap[i].phase[idx]   = analyze(history[i], rail, r);
+      g_snap[i].session[idx] = session[i][idx];
+    }
+    g_snap[i].live    = r;
+    g_snap[i].history = &history[i];
+
+    if (r.attached()) total_mW += power_mW(r.v_mV, r.total_i_mA());
+
+    if (log_due && (r.attached() || r.err != PortError::Ok)) {
+      const char* rails = r.has_c() ? (r.has_a() ? "C+A" : "C")
+                                    : (r.has_a() ? "A" : "-");
+      Serial.printf("[t=%lus] port%u: rails=%s V=%umV Ic=%umA Ia=%umA proto=%s err=%s\n",
+                    (unsigned long)(now / 1000), i,
+                    rails, r.v_mV, r.i_c_mA, r.i_a_mA,
+                    protocol_name(r.proto), err_name(r.err));
+    }
+  }
+  if (log_due) last_log_ms = now;
+  g_total_mW = total_mW;
+  g_led_err  = any_err;
+}
+
 }  // namespace
 
 void app_setup() {
@@ -135,40 +181,8 @@ void app_loop() {
     last_led_ms = now;
     heartbeat_tick(now);
   }
-  if (now - last_sample_ms < kSampleMs) return;
-  last_sample_ms = now;
 
-  bool any_err = false;
-  PortSnapshot snap[kPorts];
-  uint32_t     total_mW = 0;
-  for (uint8_t i = 0; i < kPorts; ++i) {
-    PortReading r = readers[i] ? readers[i]->read(now) : PortReading{};
-    history[i].push(to_sample(r));
-    if (r.is_fault()) any_err = true;
+  if (now - last_sample_ms >= kSampleMs) sample_tick(now);
 
-    for (Rail rail : kRails) {
-      uint8_t idx = (uint8_t)rail;
-      session_update(session[i][idx], r, rail, kSampleMs);
-      snap[i].phase[idx]   = analyze(history[i], rail, r);
-      snap[i].session[idx] = session[i][idx];
-    }
-    snap[i].live    = r;
-    snap[i].history = &history[i];
-
-    if (r.attached()) total_mW += power_mW(r.v_mV, r.total_i_mA());
-
-    // Skip the trace when nothing is plugged in or when no host is
-    // reading from CDC, both to keep the log signal high and to avoid
-    // blocking on a full USB TX buffer with no consumer.
-    if (Serial && (r.attached() || r.err != PortError::Ok)) {
-      const char* rails = r.has_c() ? (r.has_a() ? "C+A" : "C")
-                                    : (r.has_a() ? "A" : "-");
-      Serial.printf("[t=%lus] port%u: rails=%s V=%umV Ic=%umA Ia=%umA proto=%s err=%s\n",
-                    (unsigned long)(now / 1000), i,
-                    rails, r.v_mV, r.i_c_mA, r.i_a_mA,
-                    protocol_name(r.proto), err_name(r.err));
-    }
-  }
-  ui.render(snap, total_mW, now);
-  g_led_err = any_err;
+  ui.render(g_snap, g_total_mW, now);
 }

@@ -362,7 +362,7 @@ void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
 // fall back to zero if PortHistory has fewer samples than requested
 // (PortHistory::avg_i_mA would otherwise average over what it has).
 uint16_t avg_i_full_window(const PortHistory* h, size_t seconds, Rail rail) {
-  if (!h || h->size() < seconds) return 0;
+  if (!h || h->size() < samples_for(seconds)) return 0;
   return h->avg_i_mA(seconds, rail);
 }
 

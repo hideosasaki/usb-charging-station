@@ -1,12 +1,15 @@
-// Per-port time-series ring buffer. One sample per second, ~1 hour of
-// retention. Samples are stored newest-first via at(0) regardless of the
-// internal write cursor; callers never see the wrap.
+// Per-port time-series ring buffer. push() rate is set by kSampleMs in
+// build_config.h; at the default 10 Hz the 3600-slot buffer holds ~6
+// minutes — long enough for every analyzer/ETA window. Samples are
+// stored newest-first via at(0) regardless of the internal write cursor;
+// callers never see the wrap.
 
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include "build_config.h"
 #include "port_reader.h"  // Rail
 
 // flags bits — keep one definition so producers (PortReader bridge) and
@@ -54,9 +57,16 @@ class PortHistory {
   // Behavior is undefined when i >= size().
   const HistorySample& at(size_t i) const;
 
-  // Mean current of the given rail over the last min(seconds, size())
-  // samples. Returns 0 when empty.
-  uint16_t avg_i_mA(size_t seconds, Rail rail) const;
+  // Mean current of the given rail over the last n samples. Returns 0
+  // when empty. Used by tests that reason directly in sample counts.
+  uint16_t avg_i_mA_samples(size_t n, Rail rail) const;
+
+  // Mean current over the last `seconds` of history. Returns 0 when empty.
+  // Production callers express analyzer/ETA windows in seconds, so this
+  // converts to the underlying sample count via kSamplesPerSec.
+  uint16_t avg_i_mA(size_t seconds, Rail rail) const {
+    return avg_i_mA_samples(samples_for(seconds), rail);
+  }
 
   // Min/max instantaneous power (mW) over the last min(seconds, size())
   // samples. Power is computed against the per-sample rail sum.

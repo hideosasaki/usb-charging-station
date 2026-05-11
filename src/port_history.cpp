@@ -31,9 +31,9 @@ ReverseCursor newest_cursor(const HistorySample* buf, size_t head,
 
 }  // namespace
 
-uint16_t PortHistory::avg_i_mA(size_t seconds, Rail rail) const {
+uint16_t PortHistory::avg_i_mA_samples(size_t n, Rail rail) const {
   if (size_ == 0) return 0;
-  size_t   n   = seconds < size_ ? seconds : size_;
+  if (n > size_) n = size_;
   uint32_t sum = 0;
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {

@@ -2,6 +2,7 @@
 
 #include <unity.h>
 
+#include "../../src/build_config.h"
 #include "../../src/charge_analyzer.h"
 #include "../../src/port_bridge.h"
 #include "../../src/port_history.h"
@@ -14,8 +15,10 @@ PortReading mk(uint16_t v_mV, uint16_t i_mA, bool attached = true) {
   return test_support::make_reading_c(v_mV, i_mA, attached);
 }
 
-void fill(PortHistory& h, const PortReading& r, size_t n) {
-  for (size_t i = 0; i < n; ++i) h.push(to_sample(r));
+// `seconds` is in real time; convert to the underlying sample count so
+// the test wall-clock semantics survive a change in kSampleMs.
+void fill_seconds(PortHistory& h, const PortReading& r, size_t seconds) {
+  for (size_t i = 0; i < samples_for(seconds); ++i) h.push(to_sample(r));
 }
 
 }  // namespace
@@ -29,22 +32,22 @@ void test_idle_when_detached(void) {
 void test_idle_when_current_negligible(void) {
   PortHistory h;
   PortReading now = mk(5000, 20, true);
-  fill(h, now, 10);
+  fill_seconds(h, now, 10);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Idle, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_cc_high_v_high_stable_i(void) {
   PortHistory h;
   PortReading now = mk(9000, 2050);
-  fill(h, now, 60);
+  fill_seconds(h, now, 60);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CC, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_cv_high_v_falling_i(void) {
   PortHistory h;
   // 60s ago: ~2000 mA, now: 1000 mA at 9V — current dropped meaningfully.
-  for (int i = 0; i < 30; ++i) h.push(to_sample(mk(9000, 2000)));
-  for (int i = 0; i < 30; ++i) h.push(to_sample(mk(9000, 1000)));
+  for (size_t i = 0; i < samples_for(30); ++i) h.push(to_sample(mk(9000, 2000)));
+  for (size_t i = 0; i < samples_for(30); ++i) h.push(to_sample(mk(9000, 1000)));
   PortReading now = mk(9000, 1000);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CV, (uint8_t)analyze(h, Rail::UsbC, now));
 }
@@ -53,14 +56,14 @@ void test_neardone_low_v_short_history(void) {
   // Just transitioned to 5V/450mA — not enough Done-window samples yet.
   PortHistory h;
   PortReading now = mk(5000, 450);
-  fill(h, now, 5);
+  fill_seconds(h, now, 5);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::NearDone, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_done_after_neardone_persists(void) {
   PortHistory h;
   PortReading now = mk(5000, 250);
-  fill(h, now, 60);
+  fill_seconds(h, now, 60);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Done, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 

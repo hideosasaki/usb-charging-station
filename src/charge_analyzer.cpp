@@ -3,6 +3,8 @@
 
 #include "charge_analyzer.h"
 
+#include "build_config.h"
+
 namespace {
 
 constexpr uint16_t kHighVoltage_mV   = 7000;
@@ -24,7 +26,7 @@ Phase analyze(const PortHistory& h, Rail rail, const PortReading& now) {
     // CV is detected as a sustained drop from the older window to the
     // recent one. Without enough history we cannot distinguish CC from CV,
     // so default to CC.
-    if (h.size() >= kCvWindowOld_s) {
+    if (h.size() >= samples_for(kCvWindowOld_s)) {
       uint16_t old_avg    = h.avg_i_mA(kCvWindowOld_s, rail);
       uint16_t recent_avg = h.avg_i_mA(kCvWindowRecent_s, rail);
       if (old_avg > recent_avg + kCvDropThresh_mA) return Phase::CV;
@@ -34,7 +36,7 @@ Phase analyze(const PortHistory& h, Rail rail, const PortReading& now) {
 
   // Low-voltage tail. If we've sat at low-V/low-I for long enough call
   // it Done; otherwise it's still tapering toward done.
-  if (now_i_mA <= kDoneI_mA && h.size() >= kDoneWindow_s &&
+  if (now_i_mA <= kDoneI_mA && h.size() >= samples_for(kDoneWindow_s) &&
       h.avg_i_mA(kDoneWindow_s, rail) <= kDoneI_mA) {
     return Phase::Done;
   }
