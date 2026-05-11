@@ -12,10 +12,9 @@
 #include "port_reader.h"
 
 enum class ScenarioId : uint8_t {
-  A_Pd30Phone   = 0, // Port 0 default
-  B_Std5VSteady = 1, // Port 1 default
-  C_IdleBurst   = 2, // Port 2 default
-  D_DualCpA     = 3, // Dual-rail soak: C alone -> C+A -> A alone, loop
+  A_Pd30Phone = 0,   // Port 0 default
+  B_DualCpA   = 1,   // Port 1 default — C alone -> C+A -> A alone, loops
+  C_IdleBurst = 2,   // Port 2 default
 };
 
 class MockPortReader : public PortReader {

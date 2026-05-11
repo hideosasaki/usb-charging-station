@@ -55,9 +55,16 @@ Nominal scenario_a(uint32_t now_ms) {
   return Nominal{};
 }
 
+// 0..300s: PD3.0 9V/2A on USB-C alone.
+// 300..600s: both rails active, Vbus clamped to 5V (the SW3518 dual-port
+//   limit), Ic=1500 mA and Ia=800 mA.
+// 600..900s: USB-C unplugged, USB-A alone at 5V/1000 mA.
+// Loops at 900s so soak tests can run unattended.
 Nominal scenario_b(uint32_t now_ms) {
-  if (now_ms >= 800'000u && now_ms < 830'000u) return Nominal{};
-  return single_c(5000, 480, Protocol::Std5V);
+  uint32_t t = now_ms % 900'000u;
+  if (t < 300'000u) return single_c(9000, 2050, Protocol::Pd30);
+  if (t < 600'000u) return dual_ca(5000, 1500, 800, Protocol::Std5V);
+  return single_a(5000, 1000, Protocol::Std5V);
 }
 
 Nominal scenario_c(uint32_t now_ms) {
@@ -66,24 +73,11 @@ Nominal scenario_c(uint32_t now_ms) {
   return Nominal{};
 }
 
-// 0..300s: PD3.0 9V/2A on USB-C alone.
-// 300..600s: both rails active, Vbus clamped to 5V (the SW3518 dual-port
-//   limit), Ic=1500 mA and Ia=800 mA.
-// 600..900s: USB-C unplugged, USB-A alone at 5V/1000 mA.
-// Loops at 900s so soak tests can run unattended.
-Nominal scenario_d(uint32_t now_ms) {
-  uint32_t t = now_ms % 900'000u;
-  if (t < 300'000u) return single_c(9000, 2050, Protocol::Pd30);
-  if (t < 600'000u) return dual_ca(5000, 1500, 800, Protocol::Std5V);
-  return single_a(5000, 1000, Protocol::Std5V);
-}
-
 Nominal nominal_for(ScenarioId s, uint32_t now_ms) {
   switch (s) {
-    case ScenarioId::A_Pd30Phone:   return scenario_a(now_ms);
-    case ScenarioId::B_Std5VSteady: return scenario_b(now_ms);
-    case ScenarioId::C_IdleBurst:   return scenario_c(now_ms);
-    case ScenarioId::D_DualCpA:     return scenario_d(now_ms);
+    case ScenarioId::A_Pd30Phone: return scenario_a(now_ms);
+    case ScenarioId::B_DualCpA:   return scenario_b(now_ms);
+    case ScenarioId::C_IdleBurst: return scenario_c(now_ms);
   }
   return Nominal{};
 }
@@ -180,7 +174,7 @@ void MockPortReader::resume_auto()              { has_override_ = false; force_ 
 // Per-port seeds keep the three jitter streams independent. File-scope
 // so make_port_reader and make_mock_port_reader share the same instances.
 static MockPortReader g_r0(0, ScenarioId::A_Pd30Phone,   0xA51C3001u);
-static MockPortReader g_r1(1, ScenarioId::B_Std5VSteady, 0xA51C3002u);
+static MockPortReader g_r1(1, ScenarioId::B_DualCpA,   0xA51C3002u);
 static MockPortReader g_r2(2, ScenarioId::C_IdleBurst,   0xA51C3003u);
 
 MockPortReader* make_mock_port_reader(uint8_t idx) {

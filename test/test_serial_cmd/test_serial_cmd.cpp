@@ -12,9 +12,9 @@ namespace {
 
 constexpr uint32_t kSeed = 0xC0FFEEu;
 
-MockPortReader r0(0, ScenarioId::A_Pd30Phone,   kSeed);
-MockPortReader r1(1, ScenarioId::B_Std5VSteady, kSeed);
-MockPortReader r2(2, ScenarioId::C_IdleBurst,   kSeed);
+MockPortReader r0(0, ScenarioId::A_Pd30Phone, kSeed);
+MockPortReader r1(1, ScenarioId::B_DualCpA,   kSeed);
+MockPortReader r2(2, ScenarioId::C_IdleBurst, kSeed);
 MockPortReader* readers[3] = {&r0, &r1, &r2};
 
 CmdResult run(const char* line) {
@@ -30,7 +30,7 @@ CmdResult run(const char* line) {
 void setUp(void) {
   // Reset each port to auto/scenario default before every test.
   r0.set_scenario(ScenarioId::A_Pd30Phone);
-  r1.set_scenario(ScenarioId::B_Std5VSteady);
+  r1.set_scenario(ScenarioId::B_DualCpA);
   r2.set_scenario(ScenarioId::C_IdleBurst);
   r0.clear_override(); r1.clear_override(); r2.clear_override();
 }
@@ -87,13 +87,6 @@ void test_port_override_dual_rail(void) {
   TEST_ASSERT_EQUAL_UINT16(800,  r.i_a_mA);
 }
 
-void test_scenario_dual_id(void) {
-  TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("scenario 0 D"));
-  PortReading r = r0.read(450'000);
-  TEST_ASSERT_TRUE(r.has_c());
-  TEST_ASSERT_TRUE(r.has_a());
-}
-
 void test_port_index_out_of_range(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::OutOfRange,
                        (int)run("port 9 detach"));
@@ -107,9 +100,12 @@ void test_port_bad_args(void) {
 }
 
 void test_scenario_switch(void) {
+  // Switching Port 0 to scenario B (the dual-rail soak) must take effect:
+  // at t=450 s scenario_b sits in its 5 V C+A window.
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("scenario 0 B"));
-  PortReading r = r0.read(0);
-  TEST_ASSERT_TRUE(r.attached());
+  PortReading r = r0.read(450'000);
+  TEST_ASSERT_TRUE(r.has_c());
+  TEST_ASSERT_TRUE(r.has_a());
   TEST_ASSERT_EQUAL_UINT16(5000, r.v_mV);
 }
 
@@ -143,7 +139,6 @@ int main(int, char**) {
   RUN_TEST(test_port_index_out_of_range);
   RUN_TEST(test_port_bad_args);
   RUN_TEST(test_scenario_switch);
-  RUN_TEST(test_scenario_dual_id);
   RUN_TEST(test_scenario_bad_id);
   RUN_TEST(test_status_writes_output);
   RUN_TEST(test_empty_line_is_ok);

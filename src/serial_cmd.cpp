@@ -69,10 +69,9 @@ bool parse_protocol(const char* tok, Protocol& out) {
 bool parse_scenario_id(const char* tok, ScenarioId& out) {
   if (!tok || tok[0] == '\0' || tok[1] != '\0') return false;
   switch (tok[0]) {
-    case 'A': case 'a': out = ScenarioId::A_Pd30Phone;   return true;
-    case 'B': case 'b': out = ScenarioId::B_Std5VSteady; return true;
-    case 'C': case 'c': out = ScenarioId::C_IdleBurst;   return true;
-    case 'D': case 'd': out = ScenarioId::D_DualCpA;     return true;
+    case 'A': case 'a': out = ScenarioId::A_Pd30Phone; return true;
+    case 'B': case 'b': out = ScenarioId::B_DualCpA;   return true;
+    case 'C': case 'c': out = ScenarioId::C_IdleBurst; return true;
   }
   return false;
 }

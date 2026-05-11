@@ -91,23 +91,6 @@ void test_scenario_a_loops_after_740s(void) {
   approx_pct(2050, s.i_c_mA, 2, "i@loop");
 }
 
-void test_scenario_b_steady(void) {
-  MockPortReader r(1, ScenarioId::B_Std5VSteady, kSeed);
-  r.begin();
-  PortReading s = r.read(50'000);
-  TEST_ASSERT_TRUE(s.attached());
-  approx_eq(5000, s.v_mV, 50, "vB");
-  approx_eq(480, s.i_c_mA, 15, "iB");
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Std5V, (uint8_t)s.proto);
-}
-
-void test_scenario_b_drop_window(void) {
-  MockPortReader r(1, ScenarioId::B_Std5VSteady, kSeed);
-  r.begin();
-  PortReading s = r.read(810'000);
-  TEST_ASSERT_FALSE(s.attached());
-}
-
 void test_scenario_c_idle_and_burst(void) {
   MockPortReader r(2, ScenarioId::C_IdleBurst, kSeed);
   r.begin();
@@ -168,37 +151,37 @@ void test_jitter_within_two_percent(void) {
   TEST_ASSERT_TRUE(hi <= (uint16_t)(2050 * 102 / 100 + 1));
 }
 
-void test_scenario_d_c_alone(void) {
-  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+void test_scenario_b_c_alone(void) {
+  MockPortReader r(1, ScenarioId::B_DualCpA, kSeed);
   r.begin();
   PortReading s = r.read(100'000);  // mid first 300s window
   TEST_ASSERT_TRUE(s.has_c());
   TEST_ASSERT_FALSE(s.has_a());
-  approx_eq(9000, s.v_mV, 50, "vD@100s");
-  approx_pct(2050, s.i_c_mA, 2, "icD@100s");
+  approx_eq(9000, s.v_mV, 50, "vB@100s");
+  approx_pct(2050, s.i_c_mA, 2, "icB@100s");
   TEST_ASSERT_EQUAL_UINT16(0, s.i_a_mA);
 }
 
-void test_scenario_d_both_rails(void) {
-  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+void test_scenario_b_both_rails(void) {
+  MockPortReader r(1, ScenarioId::B_DualCpA, kSeed);
   r.begin();
   PortReading s = r.read(450'000);  // mid 300..600s window
   TEST_ASSERT_TRUE(s.has_c());
   TEST_ASSERT_TRUE(s.has_a());
-  approx_eq(5000, s.v_mV, 50, "vD@450s");
-  approx_pct(1500, s.i_c_mA, 2, "icD@450s");
-  approx_pct(800,  s.i_a_mA, 2, "iaD@450s");
+  approx_eq(5000, s.v_mV, 50, "vB@450s");
+  approx_pct(1500, s.i_c_mA, 2, "icB@450s");
+  approx_pct(800,  s.i_a_mA, 2, "iaB@450s");
 }
 
-void test_scenario_d_a_alone(void) {
-  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+void test_scenario_b_a_alone(void) {
+  MockPortReader r(1, ScenarioId::B_DualCpA, kSeed);
   r.begin();
   PortReading s = r.read(750'000);  // mid 600..900s window
   TEST_ASSERT_FALSE(s.has_c());
   TEST_ASSERT_TRUE(s.has_a());
-  approx_eq(5000, s.v_mV, 50, "vD@750s");
+  approx_eq(5000, s.v_mV, 50, "vB@750s");
   TEST_ASSERT_EQUAL_UINT16(0, s.i_c_mA);
-  approx_pct(1000, s.i_a_mA, 2, "iaD@750s");
+  approx_pct(1000, s.i_a_mA, 2, "iaB@750s");
 }
 
 void test_override_pins_dual_rail(void) {
@@ -225,12 +208,10 @@ int main(int, char**) {
   RUN_TEST(test_scenario_a_neardone_at_700s);
   RUN_TEST(test_scenario_a_detach_at_725s);
   RUN_TEST(test_scenario_a_loops_after_740s);
-  RUN_TEST(test_scenario_b_steady);
-  RUN_TEST(test_scenario_b_drop_window);
+  RUN_TEST(test_scenario_b_c_alone);
+  RUN_TEST(test_scenario_b_both_rails);
+  RUN_TEST(test_scenario_b_a_alone);
   RUN_TEST(test_scenario_c_idle_and_burst);
-  RUN_TEST(test_scenario_d_c_alone);
-  RUN_TEST(test_scenario_d_both_rails);
-  RUN_TEST(test_scenario_d_a_alone);
   RUN_TEST(test_override_pins_value);
   RUN_TEST(test_override_pins_dual_rail);
   RUN_TEST(test_force_detach_overrides_scenario);
