@@ -108,6 +108,51 @@ void test_power_range(void) {
   TEST_ASSERT_EQUAL_UINT32(18000u, hi);
 }
 
+void test_downsample_empty(void) {
+  PortHistory h;
+  uint32_t out[4] = {99, 99, 99, 99};
+  h.power_downsample_mW(out, 4, 40);
+  for (int i = 0; i < 4; ++i) TEST_ASSERT_EQUAL_UINT32(0u, out[i]);
+}
+
+void test_downsample_constant_power(void) {
+  PortHistory h;
+  // Push 40 identical samples: 5V * 1A = 5W = 5000 mW.
+  for (int i = 0; i < 40; ++i) h.push(mk(5000, 1000));
+  uint32_t out[4] = {0, 0, 0, 0};
+  h.power_downsample_mW(out, 4, 40);
+  for (int i = 0; i < 4; ++i) TEST_ASSERT_EQUAL_UINT32(5000u, out[i]);
+}
+
+void test_downsample_oldest_first(void) {
+  PortHistory h;
+  // 10 old @ 1W, then 10 new @ 9W. With count=2 and total=20, out[0]
+  // covers the older half (1W) and out[1] the newer half (9W).
+  for (int i = 0; i < 10; ++i) h.push(mk(1000, 1000));   // 1W
+  for (int i = 0; i < 10; ++i) h.push(mk(9000, 1000));   // 9W
+  uint32_t out[2] = {0, 0};
+  h.power_downsample_mW(out, 2, 20);
+  TEST_ASSERT_EQUAL_UINT32(1000u, out[0]);
+  TEST_ASSERT_EQUAL_UINT32(9000u, out[1]);
+}
+
+void test_downsample_partial_history(void) {
+  PortHistory h;
+  // Only 3 samples exist; request a 6-bin downsample over 12 seconds.
+  // per_bin_base=2, remainder=0 -> every bin is width 2.
+  h.push(mk(5000, 1000));  // oldest, 5W
+  h.push(mk(5000, 1000));  // 5W
+  h.push(mk(9000, 1000));  // newest, 9W
+  uint32_t out[6] = {99, 99, 99, 99, 99, 99};
+  h.power_downsample_mW(out, 6, 12);
+  TEST_ASSERT_EQUAL_UINT32(0u, out[0]);
+  TEST_ASSERT_EQUAL_UINT32(0u, out[1]);
+  TEST_ASSERT_EQUAL_UINT32(0u, out[2]);
+  TEST_ASSERT_EQUAL_UINT32(0u, out[3]);
+  TEST_ASSERT_EQUAL_UINT32(5000u, out[4]);
+  TEST_ASSERT_EQUAL_UINT32(7000u, out[5]);
+}
+
 void setUp(void)    {}
 void tearDown(void) {}
 
@@ -121,5 +166,9 @@ int main(int, char**) {
   RUN_TEST(test_wrap_drops_oldest);
   RUN_TEST(test_avg_recent);
   RUN_TEST(test_power_range);
+  RUN_TEST(test_downsample_empty);
+  RUN_TEST(test_downsample_constant_power);
+  RUN_TEST(test_downsample_oldest_first);
+  RUN_TEST(test_downsample_partial_history);
   return UNITY_END();
 }

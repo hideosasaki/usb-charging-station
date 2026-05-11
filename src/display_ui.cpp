@@ -23,14 +23,19 @@ constexpr uint16_t kValueColor  = TFT_WHITE;
 constexpr uint16_t kProtoColor  = TFT_CYAN;
 constexpr uint16_t kBgColor     = TFT_BLACK;
 
-constexpr int16_t kVoltageY   = 28;
-constexpr int16_t kCurrentY   = 64;
-constexpr int16_t kPowerY     = 100;
-constexpr int16_t kProtoY     = 140;
-constexpr int16_t kPhaseY     = 168;
-constexpr int16_t kFieldW     = kColW - 12;
-constexpr int16_t kBigFontH   = 26;
-constexpr int16_t kSmallFontH = 16;
+constexpr int16_t kVoltageY    = 28;
+constexpr int16_t kCurrentY    = 64;
+constexpr int16_t kPowerY      = 100;
+constexpr int16_t kProtoY      = 140;
+constexpr int16_t kPhaseY      = 168;
+constexpr int16_t kSparkY      = 186;
+constexpr int16_t kSparkH      = 12;
+constexpr int16_t kFieldW      = kColW - 12;
+constexpr int16_t kSparkBins   = kFieldW;             // one px per bin
+constexpr size_t  kSparkWindow = 3600;                // full 1h history
+constexpr int16_t kBigFontH    = 26;
+constexpr int16_t kSmallFontH  = 16;
+constexpr uint16_t kSparkColor = TFT_GREEN;
 
 uint16_t phase_color(Phase p) {
   switch (p) {
@@ -69,6 +74,55 @@ void draw_value(uint8_t col, int16_t y, int16_t h, uint16_t fg,
   t.drawString(text, x, y, font);
 }
 
+// Per-port previous bar heights so render() only rewrites columns whose
+// height changed since the last tick. 88 bytes per port; the bins[]
+// scratch is shared across ports since they paint sequentially.
+uint8_t  spark_prev_[3][kSparkBins]{};
+bool     spark_prev_valid_[3] = {false, false, false};
+
+void draw_sparkline(uint8_t col, const PortHistory& h, bool attached) {
+  auto&   t  = display_tft();
+  int16_t x0 = col_x(col);
+
+  if (!attached || h.size() == 0) {
+    t.fillRect(x0, kSparkY, kSparkBins, kSparkH, kBgColor);
+    for (int16_t i = 0; i < kSparkBins; ++i) spark_prev_[col][i] = 0;
+    spark_prev_valid_[col] = true;
+    return;
+  }
+
+  static uint32_t bins[kSparkBins];
+  h.power_downsample_mW(bins, kSparkBins, kSparkWindow);
+
+  uint32_t peak = 0;
+  for (size_t i = 0; i < kSparkBins; ++i) {
+    if (bins[i] > peak) peak = bins[i];
+  }
+  if (peak == 0) {
+    if (spark_prev_valid_[col]) {
+      t.fillRect(x0, kSparkY, kSparkBins, kSparkH, kBgColor);
+      for (int16_t i = 0; i < kSparkBins; ++i) spark_prev_[col][i] = 0;
+    }
+    spark_prev_valid_[col] = true;
+    return;
+  }
+
+  bool first = !spark_prev_valid_[col];
+  for (int16_t i = 0; i < kSparkBins; ++i) {
+    uint32_t bar32 = (bins[i] * (uint32_t)kSparkH) / peak;
+    if (bar32 == 0 && bins[i] > 0) bar32 = 1;
+    uint8_t bar = (uint8_t)bar32;
+    if (!first && bar == spark_prev_[col][i]) continue;
+
+    t.drawFastVLine(x0 + i, kSparkY, kSparkH, kBgColor);
+    if (bar > 0) {
+      t.drawFastVLine(x0 + i, kSparkY + kSparkH - bar, bar, kSparkColor);
+    }
+    spark_prev_[col][i] = bar;
+  }
+  spark_prev_valid_[col] = true;
+}
+
 // Format milli-units (mV / mA / mW) as "X.YY<suffix>". Always integer
 // math to avoid pulling in soft-float on M0+.
 void format_centi(char* buf, size_t n, uint32_t milli, bool attached,
@@ -84,6 +138,7 @@ void format_centi(char* buf, size_t n, uint32_t milli, bool attached,
 void DisplayUi::begin() {
   draw_frame();
   for (auto& c : last_) c.valid = false;
+  for (auto& v : spark_prev_valid_) v = false;
   last_total_mW_  = 0xFFFFFFFFu;
   last_elapsed_s_ = 0xFFFFFFFFu;
 }
@@ -126,6 +181,8 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     c.phase    = (uint8_t)p.phase;
     c.attached = p.live.attached;
     c.valid    = true;
+
+    if (p.history) draw_sparkline(i, *p.history, p.live.attached);
   }
 
   uint32_t earliest_start = 0xFFFFFFFFu;

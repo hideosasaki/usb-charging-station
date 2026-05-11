@@ -68,3 +68,35 @@ void PortHistory::power_range_mW(size_t seconds, uint32_t& lo,
   lo = mn / 1000u;
   hi = mx / 1000u;
 }
+
+void PortHistory::power_downsample_mW(uint32_t* out, size_t count,
+                                      size_t total_seconds) const {
+  if (count == 0) return;
+  for (size_t b = 0; b < count; ++b) out[b] = 0;
+  if (size_ == 0 || total_seconds == 0) return;
+
+  auto     cur          = newest_cursor(buf_, head_, kCapacity);
+  size_t   covered      = total_seconds < size_ ? total_seconds : size_;
+  size_t   per_bin_base = total_seconds / count;
+  // Distribute the remainder seconds across the trailing bins so the
+  // bin widths sum exactly to total_seconds.
+  size_t   remainder    = total_seconds % count;
+
+  for (size_t b = count; b-- > 0;) {
+    size_t   width = per_bin_base + (b < remainder ? 1 : 0);
+    // Accumulate v*i in mV*mA and defer the /1000 to once per bin —
+    // saves n-1 software divides per bin on M0+.
+    uint32_t sum_vi = 0;
+    size_t   n      = 0;
+    for (size_t k = 0; k < width && covered > 0; ++k) {
+      const auto& s = buf_[cur.idx];
+      sum_vi += static_cast<uint32_t>(s.v_mV) *
+                static_cast<uint32_t>(s.i_mA);
+      cur.advance(kCapacity);
+      --covered;
+      ++n;
+    }
+    out[b] = n ? (sum_vi / (uint32_t)(n * 1000u)) : 0;
+    if (covered == 0) break;
+  }
+}

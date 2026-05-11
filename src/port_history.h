@@ -47,6 +47,12 @@ class PortHistory {
   // samples. Returns lo=hi=0 when empty.
   void power_range_mW(size_t seconds, uint32_t& lo, uint32_t& hi) const;
 
+  // Compress the last `total_seconds` of power into `count` bins of
+  // averaged mW, oldest bin at out[0]. Bins past the available history
+  // are zero-filled. Used to drive a fixed-width sparkline.
+  void power_downsample_mW(uint32_t* out, size_t count,
+                           size_t total_seconds) const;
+
  private:
   HistorySample buf_[kCapacity];
   size_t        head_;   // index where the next push will write
