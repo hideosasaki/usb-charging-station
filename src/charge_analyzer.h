@@ -15,11 +15,11 @@ Phase analyze(const PortHistory& h, const PortReading& now);
 
 inline const char* phase_name(Phase p) {
   switch (p) {
-    case Phase::Idle:     return "idle";
-    case Phase::CC:       return "CC";
-    case Phase::CV:       return "CV";
-    case Phase::NearDone: return "near";
-    case Phase::Done:     return "done";
+    case Phase::Idle:     return "Idle";
+    case Phase::CC:       return "Fast";
+    case Phase::CV:       return "Taper";
+    case Phase::NearDone: return "Almost";
+    case Phase::Done:     return "Done";
   }
   return "?";
 }

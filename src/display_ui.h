@@ -28,6 +28,7 @@ class DisplayUi {
     uint16_t v_mV;
     uint16_t i_mA;
     uint32_t w_mW;
+    uint32_t elapsed_s;
     uint8_t  proto;
     uint8_t  phase;
     bool     attached;
@@ -35,6 +36,5 @@ class DisplayUi {
   };
 
   Cache    last_[3]{};
-  uint32_t last_total_mW_  = 0xFFFFFFFFu;
-  uint32_t last_elapsed_s_ = 0xFFFFFFFFu;
+  uint32_t last_total_mW_ = 0xFFFFFFFFu;
 };
