@@ -42,6 +42,8 @@ void display_set_backlight(uint8_t pwm) {
   analogWrite(BL_PIN, pwm);
 }
 
+TFT_eSPI& display_tft() { return tft; }
+
 void display_hello() {
   const int16_t w = tft.width();
   const int16_t h = tft.height();

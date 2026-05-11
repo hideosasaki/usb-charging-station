@@ -57,13 +57,14 @@ void PortHistory::power_range_mW(size_t seconds, uint32_t& lo,
   uint32_t mx  = 0;
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
-    const auto& s   = buf_[cur.idx];
-    uint32_t    vi  = static_cast<uint32_t>(s.v_mV) *
-                      static_cast<uint32_t>(s.i_mA);
+    const auto& s  = buf_[cur.idx];
+    uint32_t    vi = static_cast<uint32_t>(s.v_mV) *
+                     static_cast<uint32_t>(s.i_mA);
     if (vi < mn) mn = vi;
     if (vi > mx) mx = vi;
     cur.advance(kCapacity);
   }
+  // Defer the /1000 (single divide on M0+) until after the min/max loop.
   lo = mn / 1000u;
   hi = mx / 1000u;
 }

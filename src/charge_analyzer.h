@@ -12,3 +12,14 @@
 enum class Phase : uint8_t { Idle, CC, CV, NearDone, Done };
 
 Phase analyze(const PortHistory& h, const PortReading& now);
+
+inline const char* phase_name(Phase p) {
+  switch (p) {
+    case Phase::Idle:     return "idle";
+    case Phase::CC:       return "CC";
+    case Phase::CV:       return "CV";
+    case Phase::NearDone: return "near";
+    case Phase::Done:     return "done";
+  }
+  return "?";
+}

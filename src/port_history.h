@@ -12,6 +12,10 @@
 static constexpr uint8_t kFlagAttached = 0x01;
 static constexpr uint8_t kFlagError    = 0x02;
 
+inline uint32_t power_mW(uint16_t v_mV, uint16_t i_mA) {
+  return (static_cast<uint32_t>(v_mV) * static_cast<uint32_t>(i_mA)) / 1000u;
+}
+
 struct HistorySample {
   uint16_t v_mV;
   uint16_t i_mA;

@@ -44,3 +44,16 @@ class PortReader {
 // Factory implemented by exactly one of mock_port_reader.cpp or
 // sw3518_port_reader.cpp, selected at compile time via USE_MOCK_PORTS.
 PortReader* make_port_reader(uint8_t idx);
+
+inline const char* protocol_name(Protocol p) {
+  switch (p) {
+    case Protocol::None:    return "--";
+    case Protocol::Std5V:   return "5V";
+    case Protocol::Qc20:    return "QC2.0";
+    case Protocol::Qc30:    return "QC3.0";
+    case Protocol::Pd20:    return "PD2.0";
+    case Protocol::Pd30:    return "PD3.0";
+    case Protocol::Pd31Pps: return "PPS";
+  }
+  return "?";
+}
