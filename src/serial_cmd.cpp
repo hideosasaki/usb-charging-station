@@ -72,6 +72,7 @@ bool parse_scenario_id(const char* tok, ScenarioId& out) {
     case 'A': case 'a': out = ScenarioId::A_Pd30Phone;   return true;
     case 'B': case 'b': out = ScenarioId::B_Std5VSteady; return true;
     case 'C': case 'c': out = ScenarioId::C_IdleBurst;   return true;
+    case 'D': case 'd': out = ScenarioId::D_DualCpA;     return true;
   }
   return false;
 }
@@ -87,16 +88,32 @@ CmdResult cmd_port(char* saveptr, MockPortReader* readers[3]) {
   if (!strcasecmp(arg1, "attach")) { port->force_attach(); return CmdResult::Ok; }
   if (!strcasecmp(arg1, "auto"))   { port->resume_auto();  return CmdResult::Ok; }
 
+  // Numeric override. Two forms:
+  //   port N V Ic Ia PROTO   (5 args, explicit per-rail)
+  //   port N V I PROTO       (4 args, USB-C only — Ia=0)
   uint16_t v_mV;
   if (!parse_u16(arg1, v_mV)) return CmdResult::BadArgs;
-  char* i_tok = strtok_r(nullptr, kTokenSeps, &saveptr);
-  char* p_tok = strtok_r(nullptr, kTokenSeps, &saveptr);
-  if (!i_tok || !p_tok) return CmdResult::BadArgs;
-  uint16_t i_mA;
-  if (!parse_u16(i_tok, i_mA)) return CmdResult::BadArgs;
+  char* toks[3] = {nullptr, nullptr, nullptr};
+  uint8_t n = 0;
+  while (n < 3) {
+    char* t = strtok_r(nullptr, kTokenSeps, &saveptr);
+    if (!t) break;
+    toks[n++] = t;
+  }
+  uint16_t i_c_mA = 0;
+  uint16_t i_a_mA = 0;
   Protocol proto;
-  if (!parse_protocol(p_tok, proto)) return CmdResult::BadArgs;
-  port->set_override(v_mV, i_mA, proto);
+  if (n == 3) {
+    if (!parse_u16(toks[0], i_c_mA)) return CmdResult::BadArgs;
+    if (!parse_u16(toks[1], i_a_mA)) return CmdResult::BadArgs;
+    if (!parse_protocol(toks[2], proto)) return CmdResult::BadArgs;
+  } else if (n == 2) {
+    if (!parse_u16(toks[0], i_c_mA)) return CmdResult::BadArgs;
+    if (!parse_protocol(toks[1], proto)) return CmdResult::BadArgs;
+  } else {
+    return CmdResult::BadArgs;
+  }
+  port->set_override(v_mV, i_c_mA, i_a_mA, proto);
   return CmdResult::Ok;
 }
 

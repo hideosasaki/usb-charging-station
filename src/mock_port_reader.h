@@ -12,9 +12,10 @@
 #include "port_reader.h"
 
 enum class ScenarioId : uint8_t {
-  A_Pd30Phone = 0,   // Port 0 default
+  A_Pd30Phone   = 0, // Port 0 default
   B_Std5VSteady = 1, // Port 1 default
-  C_IdleBurst = 2,   // Port 2 default
+  C_IdleBurst   = 2, // Port 2 default
+  D_DualCpA     = 3, // Dual-rail soak: C alone -> C+A -> A alone, loop
 };
 
 class MockPortReader : public PortReader {
@@ -30,8 +31,10 @@ class MockPortReader : public PortReader {
   PortReading last_reading() const { return last_; }
 
   // Runtime overrides used by the Serial command parser. set_override pins
-  // the port to a fixed reading until clear_override() is called.
-  void set_override(uint16_t v_mV, uint16_t i_mA, Protocol proto);
+  // the port to a fixed reading until clear_override() is called. Pass
+  // i_a_mA = 0 for the common single-rail case.
+  void set_override(uint16_t v_mV, uint16_t i_c_mA, uint16_t i_a_mA,
+                    Protocol proto);
   void clear_override();
   void force_detach();
   void force_attach();
@@ -50,7 +53,8 @@ class MockPortReader : public PortReader {
 
   bool        has_override_ = false;
   uint16_t    ov_v_mV_      = 0;
-  uint16_t    ov_i_mA_      = 0;
+  uint16_t    ov_i_c_mA_    = 0;
+  uint16_t    ov_i_a_mA_    = 0;
   Protocol    ov_proto_     = Protocol::None;
 
   enum class Force : uint8_t { None, Detach, Attach };

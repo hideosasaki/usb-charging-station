@@ -9,12 +9,29 @@
 
 namespace {
 
+// Scenario sample: Vbus is shared, so v_mV is one number, but currents
+// are per-rail to match the real chip. Use the helpers below to build
+// one — they apply a single rule for which rails are attached so
+// scenarios never carry a hand-written rail_mask.
 struct Nominal {
   uint16_t v_mV;
-  uint16_t i_mA;
-  Protocol proto;
-  bool     attached;
+  uint16_t i_c_mA;
+  uint16_t i_a_mA;
+  Protocol proto;     // USB-C side; A is implicitly Std5V
 };
+
+Nominal single_c(uint16_t v_mV, uint16_t i_mA, Protocol proto) {
+  return Nominal{v_mV, i_mA, 0, proto};
+}
+
+Nominal dual_ca(uint16_t v_mV, uint16_t i_c_mA, uint16_t i_a_mA,
+                Protocol proto) {
+  return Nominal{v_mV, i_c_mA, i_a_mA, proto};
+}
+
+Nominal single_a(uint16_t v_mV, uint16_t i_mA, Protocol proto) {
+  return Nominal{v_mV, 0, i_mA, proto};
+}
 
 uint16_t lerp_u16(uint32_t t, uint32_t t0, uint32_t t1, uint16_t v0,
                   uint16_t v1) {
@@ -28,25 +45,37 @@ uint16_t lerp_u16(uint32_t t, uint32_t t0, uint32_t t1, uint16_t v0,
 Nominal scenario_a(uint32_t now_ms) {
   uint32_t t = now_ms % 740'000u;
   if (t < 2'000u)   return Nominal{};
-  if (t < 5'000u)   return Nominal{5000, 300,  Protocol::Std5V, true};
-  if (t < 305'000u) return Nominal{9000, 2050, Protocol::Pd30,  true};
+  if (t < 5'000u)   return single_c(5000, 300,  Protocol::Std5V);
+  if (t < 305'000u) return single_c(9000, 2050, Protocol::Pd30);
   if (t < 605'000u) {
     uint16_t i = lerp_u16(t, 305'000u, 605'000u, 2050, 300);
-    return Nominal{9000, i, Protocol::Pd30, true};
+    return single_c(9000, i, Protocol::Pd30);
   }
-  if (t < 720'000u) return Nominal{5000, 300, Protocol::Pd30, true};
+  if (t < 720'000u) return single_c(5000, 300, Protocol::Pd30);
   return Nominal{};
 }
 
 Nominal scenario_b(uint32_t now_ms) {
   if (now_ms >= 800'000u && now_ms < 830'000u) return Nominal{};
-  return Nominal{5000, 480, Protocol::Std5V, true};
+  return single_c(5000, 480, Protocol::Std5V);
 }
 
 Nominal scenario_c(uint32_t now_ms) {
   uint32_t t = now_ms % 180'000u;
-  if (t >= 120'000u) return Nominal{12000, 1500, Protocol::Qc30, true};
+  if (t >= 120'000u) return single_c(12000, 1500, Protocol::Qc30);
   return Nominal{};
+}
+
+// 0..300s: PD3.0 9V/2A on USB-C alone.
+// 300..600s: both rails active, Vbus clamped to 5V (the SW3518 dual-port
+//   limit), Ic=1500 mA and Ia=800 mA.
+// 600..900s: USB-C unplugged, USB-A alone at 5V/1000 mA.
+// Loops at 900s so soak tests can run unattended.
+Nominal scenario_d(uint32_t now_ms) {
+  uint32_t t = now_ms % 900'000u;
+  if (t < 300'000u) return single_c(9000, 2050, Protocol::Pd30);
+  if (t < 600'000u) return dual_ca(5000, 1500, 800, Protocol::Std5V);
+  return single_a(5000, 1000, Protocol::Std5V);
 }
 
 Nominal nominal_for(ScenarioId s, uint32_t now_ms) {
@@ -54,8 +83,17 @@ Nominal nominal_for(ScenarioId s, uint32_t now_ms) {
     case ScenarioId::A_Pd30Phone:   return scenario_a(now_ms);
     case ScenarioId::B_Std5VSteady: return scenario_b(now_ms);
     case ScenarioId::C_IdleBurst:   return scenario_c(now_ms);
+    case ScenarioId::D_DualCpA:     return scenario_d(now_ms);
   }
   return Nominal{};
+}
+
+uint16_t apply_jitter(uint16_t i_mA, int16_t permille) {
+  if (i_mA == 0) return 0;
+  int32_t scaled = (int32_t)i_mA * (1000 + permille) / 1000;
+  if (scaled < 0) return 0;
+  if (scaled > 0xFFFF) return 0xFFFF;
+  return (uint16_t)scaled;
 }
 
 }  // namespace
@@ -69,17 +107,19 @@ int16_t MockPortReader::jitter_permille() {
   return (int16_t)((int)(rng_() % 41u) - 20);
 }
 
-// Mock scenarios express current as a single number; surface it on the
-// USB-C side because that is the rail tied to a negotiated protocol.
 PortReading MockPortReader::sample_scenario(uint32_t now_ms) const {
   Nominal n = nominal_for(scenario_, now_ms);
   PortReading r{};
   r.t_ms   = now_ms;
   r.v_mV   = n.v_mV;
-  r.i_c_mA = n.i_mA;
+  r.i_c_mA = n.i_c_mA;
+  r.i_a_mA = n.i_a_mA;
   r.proto  = n.proto;
   r.err    = PortError::Ok;
-  r.set_rail(Rail::UsbC, n.attached);
+  // A rail is "attached" when current flows through it. v_mV is shared,
+  // so attaching off voltage alone would force both rails on.
+  r.set_rail(Rail::UsbC, n.i_c_mA > 0);
+  r.set_rail(Rail::UsbA, n.i_a_mA > 0);
   return r;
 }
 
@@ -88,10 +128,14 @@ PortReading MockPortReader::read(uint32_t now_ms) {
   if (has_override_) {
     r.t_ms   = now_ms;
     r.v_mV   = ov_v_mV_;
-    r.i_c_mA = ov_i_mA_;
+    r.i_c_mA = ov_i_c_mA_;
+    r.i_a_mA = ov_i_a_mA_;
     r.proto  = ov_proto_;
     r.err    = PortError::Ok;
-    r.set_rail(Rail::UsbC, true);
+    // Override is authoritative — only the explicit currents decide
+    // which rails are attached.
+    r.set_rail(Rail::UsbC, ov_i_c_mA_ > 0);
+    r.set_rail(Rail::UsbA, ov_i_a_mA_ > 0);
   } else {
     r = sample_scenario(now_ms);
     if (force_ == Force::Detach) {
@@ -105,12 +149,12 @@ PortReading MockPortReader::read(uint32_t now_ms) {
         r.proto  = Protocol::Std5V;
         r.set_rail(Rail::UsbC, true);
       }
-      if (r.attached() && r.i_c_mA > 0) {
-        int32_t j = jitter_permille();
-        int32_t i = (int32_t)r.i_c_mA * (1000 + j) / 1000;
-        if (i < 0) i = 0;
-        if (i > 0xFFFF) i = 0xFFFF;
-        r.i_c_mA = (uint16_t)i;
+      if (r.attached()) {
+        // Shared jitter draw keeps both rails moving in step; the RNG
+        // stream is still per-port.
+        int16_t j = jitter_permille();
+        r.i_c_mA = apply_jitter(r.i_c_mA, j);
+        r.i_a_mA = apply_jitter(r.i_a_mA, j);
       }
     }
   }
@@ -118,11 +162,12 @@ PortReading MockPortReader::read(uint32_t now_ms) {
   return r;
 }
 
-void MockPortReader::set_override(uint16_t v_mV, uint16_t i_mA,
-                                  Protocol proto) {
+void MockPortReader::set_override(uint16_t v_mV, uint16_t i_c_mA,
+                                  uint16_t i_a_mA, Protocol proto) {
   has_override_ = true;
   ov_v_mV_      = v_mV;
-  ov_i_mA_      = i_mA;
+  ov_i_c_mA_    = i_c_mA;
+  ov_i_a_mA_    = i_a_mA;
   ov_proto_     = proto;
 }
 

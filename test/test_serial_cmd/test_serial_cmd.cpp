@@ -76,6 +76,24 @@ void test_port_override_protocol_aliases(void) {
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Std5V, (uint8_t)r.proto);
 }
 
+void test_port_override_dual_rail(void) {
+  TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok,
+                       (int)run("port 0 5000 1500 800 STD5V"));
+  PortReading r = r0.read(0);
+  TEST_ASSERT_TRUE(r.has_c());
+  TEST_ASSERT_TRUE(r.has_a());
+  TEST_ASSERT_EQUAL_UINT16(5000, r.v_mV);
+  TEST_ASSERT_EQUAL_UINT16(1500, r.i_c_mA);
+  TEST_ASSERT_EQUAL_UINT16(800,  r.i_a_mA);
+}
+
+void test_scenario_dual_id(void) {
+  TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("scenario 0 D"));
+  PortReading r = r0.read(450'000);
+  TEST_ASSERT_TRUE(r.has_c());
+  TEST_ASSERT_TRUE(r.has_a());
+}
+
 void test_port_index_out_of_range(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::OutOfRange,
                        (int)run("port 9 detach"));
@@ -121,9 +139,11 @@ int main(int, char**) {
   RUN_TEST(test_port_auto_restores_scenario);
   RUN_TEST(test_port_override_fixed_value);
   RUN_TEST(test_port_override_protocol_aliases);
+  RUN_TEST(test_port_override_dual_rail);
   RUN_TEST(test_port_index_out_of_range);
   RUN_TEST(test_port_bad_args);
   RUN_TEST(test_scenario_switch);
+  RUN_TEST(test_scenario_dual_id);
   RUN_TEST(test_scenario_bad_id);
   RUN_TEST(test_status_writes_output);
   RUN_TEST(test_empty_line_is_ok);

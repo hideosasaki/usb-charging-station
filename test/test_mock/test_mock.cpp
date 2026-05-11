@@ -18,6 +18,12 @@ void approx_eq(uint16_t expected, uint16_t actual, uint16_t tol, const char* wha
   TEST_ASSERT_TRUE_MESSAGE((uint16_t)diff <= tol, msg);
 }
 
+// Allows expected * pct% + 1 rounding slack. Use this for jitter-bound
+// scenario readings rather than spelling out the tolerance literal.
+void approx_pct(uint16_t expected, uint16_t actual, uint8_t pct, const char* what) {
+  approx_eq(expected, actual, (uint16_t)(expected * pct / 100 + 1), what);
+}
+
 }  // namespace
 
 void test_scenario_a_detached_before_2s(void) {
@@ -45,7 +51,7 @@ void test_scenario_a_cc_at_10s(void) {
   PortReading s = r.read(10'000);
   TEST_ASSERT_TRUE(s.attached());
   approx_eq(9000, s.v_mV, 50, "v@10s");
-  approx_eq(2050, s.i_c_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@10s");
+  approx_pct(2050, s.i_c_mA, 2, "i@10s");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Pd30, (uint8_t)s.proto);
 }
 
@@ -82,7 +88,7 @@ void test_scenario_a_loops_after_740s(void) {
   PortReading s = r.read(750'000);
   TEST_ASSERT_TRUE(s.attached());
   approx_eq(9000, s.v_mV, 50, "v@loop");
-  approx_eq(2050, s.i_c_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@loop");
+  approx_pct(2050, s.i_c_mA, 2, "i@loop");
 }
 
 void test_scenario_b_steady(void) {
@@ -110,14 +116,14 @@ void test_scenario_c_idle_and_burst(void) {
   PortReading burst = r.read(150'000);
   TEST_ASSERT_TRUE(burst.attached());
   approx_eq(12000, burst.v_mV, 80, "vC burst");
-  approx_eq(1500, burst.i_c_mA, (uint16_t)(1500 * 2 / 100 + 1), "iC burst");
+  approx_pct(1500, burst.i_c_mA, 2, "iC burst");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Qc30, (uint8_t)burst.proto);
 }
 
 void test_override_pins_value(void) {
   MockPortReader r(0, ScenarioId::A_Pd30Phone, kSeed);
   r.begin();
-  r.set_override(9000, 2050, Protocol::Pd30);
+  r.set_override(9000, 2050, 0, Protocol::Pd30);
   PortReading s = r.read(0);  // would normally be detached
   TEST_ASSERT_TRUE(s.attached());
   TEST_ASSERT_EQUAL_UINT16(9000, s.v_mV);
@@ -162,6 +168,51 @@ void test_jitter_within_two_percent(void) {
   TEST_ASSERT_TRUE(hi <= (uint16_t)(2050 * 102 / 100 + 1));
 }
 
+void test_scenario_d_c_alone(void) {
+  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+  r.begin();
+  PortReading s = r.read(100'000);  // mid first 300s window
+  TEST_ASSERT_TRUE(s.has_c());
+  TEST_ASSERT_FALSE(s.has_a());
+  approx_eq(9000, s.v_mV, 50, "vD@100s");
+  approx_pct(2050, s.i_c_mA, 2, "icD@100s");
+  TEST_ASSERT_EQUAL_UINT16(0, s.i_a_mA);
+}
+
+void test_scenario_d_both_rails(void) {
+  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+  r.begin();
+  PortReading s = r.read(450'000);  // mid 300..600s window
+  TEST_ASSERT_TRUE(s.has_c());
+  TEST_ASSERT_TRUE(s.has_a());
+  approx_eq(5000, s.v_mV, 50, "vD@450s");
+  approx_pct(1500, s.i_c_mA, 2, "icD@450s");
+  approx_pct(800,  s.i_a_mA, 2, "iaD@450s");
+}
+
+void test_scenario_d_a_alone(void) {
+  MockPortReader r(0, ScenarioId::D_DualCpA, kSeed);
+  r.begin();
+  PortReading s = r.read(750'000);  // mid 600..900s window
+  TEST_ASSERT_FALSE(s.has_c());
+  TEST_ASSERT_TRUE(s.has_a());
+  approx_eq(5000, s.v_mV, 50, "vD@750s");
+  TEST_ASSERT_EQUAL_UINT16(0, s.i_c_mA);
+  approx_pct(1000, s.i_a_mA, 2, "iaD@750s");
+}
+
+void test_override_pins_dual_rail(void) {
+  MockPortReader r(0, ScenarioId::A_Pd30Phone, kSeed);
+  r.begin();
+  r.set_override(5000, 1500, 800, Protocol::Std5V);
+  PortReading s = r.read(0);
+  TEST_ASSERT_TRUE(s.has_c());
+  TEST_ASSERT_TRUE(s.has_a());
+  TEST_ASSERT_EQUAL_UINT16(5000, s.v_mV);
+  TEST_ASSERT_EQUAL_UINT16(1500, s.i_c_mA);
+  TEST_ASSERT_EQUAL_UINT16(800,  s.i_a_mA);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -177,7 +228,11 @@ int main(int, char**) {
   RUN_TEST(test_scenario_b_steady);
   RUN_TEST(test_scenario_b_drop_window);
   RUN_TEST(test_scenario_c_idle_and_burst);
+  RUN_TEST(test_scenario_d_c_alone);
+  RUN_TEST(test_scenario_d_both_rails);
+  RUN_TEST(test_scenario_d_a_alone);
   RUN_TEST(test_override_pins_value);
+  RUN_TEST(test_override_pins_dual_rail);
   RUN_TEST(test_force_detach_overrides_scenario);
   RUN_TEST(test_force_attach_in_detached_window);
   RUN_TEST(test_jitter_within_two_percent);
