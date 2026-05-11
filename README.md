@@ -87,6 +87,8 @@ scenario <idx> <id>             # switch scenario for one port
                                 # <id> = A (PD3.0 phone, port 0 default)
                                 #       | B (dual-rail soak, port 1 default)
                                 #       | C (idle/burst, port 2 default)
+bl <0-255>                      # ILI9341 backlight PWM duty
+                                # (visibility / power-draw trials)
 ```
 
 Scenario B loops C alone (PD3.0 9 V / 2 A) → both rails (5 V; C = 1.5 A,
@@ -102,8 +104,10 @@ layout end-to-end without any real hardware.
 - Waveshare RP2040-Zero (RP2040, dual-core, USB-C, on-board WS2812B)
 - 3 × SW3518 USB-PD controllers (I²C address 0x3C is fixed, so each
   chip needs its own bus)
-- BP5293-50 (12V→5V) dedicated MCU rail
-- ILI9341 2.4" 320×240 TFT (touch unused)
+- SW3518 #1 auxiliary 5V output (max 250 mA, independent of the Vbus
+  measurement path) feeds the RP2040-Zero and the TFT
+- ILI9341 2.4" 320×240 TFT (touch unused, backlight runs at ~10% PWM
+  duty for ~40 mA total draw, comfortably within the 250 mA Aux budget)
 - 12 V DC input (4.5–24 V tolerated per SW3518 spec)
 
 ### Pinout (RP2040-Zero)

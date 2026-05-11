@@ -178,11 +178,33 @@ CmdResult serial_cmd_dispatch(char* line, MockPortReader* readers[3],
 
 #include <Arduino.h>
 
+#include "display.h"
+
 namespace {
 
 constexpr size_t kLineMax = 64;
 char     g_buf[kLineMax];
 size_t   g_len = 0;
+
+// `bl <0-255>` sets ILI9341 backlight PWM duty for visibility/power
+// trials. Handled here (Arduino-only) so host tests stay decoupled
+// from the display.
+bool try_handle_bl(char* line) {
+  char* saveptr = nullptr;
+  char* cmd = strtok_r(line, kTokenSeps, &saveptr);
+  if (!cmd || strcasecmp(cmd, "bl") != 0) return false;
+  char* tok = strtok_r(nullptr, kTokenSeps, &saveptr);
+  uint16_t duty;
+  if (!parse_u16(tok, duty) || duty > 255) {
+    Serial.print("> bad_args\n");
+    return true;
+  }
+  display_set_backlight((uint8_t)duty);
+  char msg[24];
+  snprintf(msg, sizeof(msg), "bl=%u\n> ok\n", (unsigned)duty);
+  Serial.print(msg);
+  return true;
+}
 
 }  // namespace
 
@@ -198,13 +220,19 @@ void serial_cmd_poll() {
     if (ch == '\r') continue;
     if (ch == '\n' || g_len >= kLineMax - 1) {
       g_buf[g_len] = '\0';
-      char status_out[128] = {0};
-      CmdResult res = serial_cmd_dispatch(g_buf, g_readers,
-                                          status_out, sizeof(status_out));
-      if (status_out[0]) Serial.print(status_out);
-      char tail[24];
-      snprintf(tail, sizeof(tail), "> %s\n", cmd_result_name(res));
-      Serial.print(tail);
+      // strtok_r in try_handle_bl mutates g_buf; keep a copy so the
+      // shared dispatch sees the original line when bl wasn't matched.
+      char scratch[kLineMax];
+      memcpy(scratch, g_buf, sizeof(scratch));
+      if (!try_handle_bl(scratch)) {
+        char status_out[128] = {0};
+        CmdResult res = serial_cmd_dispatch(g_buf, g_readers,
+                                            status_out, sizeof(status_out));
+        if (status_out[0]) Serial.print(status_out);
+        char tail[24];
+        snprintf(tail, sizeof(tail), "> %s\n", cmd_result_name(res));
+        Serial.print(tail);
+      }
       g_len = 0;
       continue;
     }
