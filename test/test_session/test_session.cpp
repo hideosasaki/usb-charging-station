@@ -5,17 +5,12 @@
 
 #include "../../src/port_reader.h"
 #include "../../src/session_stats.h"
+#include "../support/port_fixtures.h"
 
 namespace {
 
 PortReading mk(uint16_t v_mV, uint16_t i_mA, bool attached, uint32_t t_ms) {
-  PortReading r{};
-  r.t_ms   = t_ms;
-  r.v_mV   = v_mV;
-  r.i_c_mA = i_mA;
-  r.i_a_mA = 0;
-  r.set_rail(Rail::UsbC, attached);
-  return r;
+  return test_support::make_reading_c(v_mV, i_mA, attached, t_ms);
 }
 
 }  // namespace

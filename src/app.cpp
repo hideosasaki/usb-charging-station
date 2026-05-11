@@ -10,6 +10,7 @@
 #include "charge_analyzer.h"
 #include "display.h"
 #include "display_ui.h"
+#include "port_bridge.h"
 #include "port_history.h"
 #include "port_reader.h"
 #include "session_stats.h"
@@ -52,17 +53,6 @@ const char* err_name(PortError e) {
     case PortError::Stale:      return "Stale";
   }
   return "?";
-}
-
-HistorySample to_sample(const PortReading& r) {
-  HistorySample s{};
-  s.v_mV   = r.v_mV;
-  s.i_c_mA = r.i_c_mA;
-  s.i_a_mA = r.i_a_mA;
-  s.proto  = (uint8_t)r.proto;
-  s.flags  = (r.attached() ? kFlagAttached : 0) |
-             (r.err != PortError::Ok ? kFlagError : 0);
-  return s;
 }
 
 }  // namespace

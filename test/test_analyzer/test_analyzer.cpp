@@ -3,30 +3,15 @@
 #include <unity.h>
 
 #include "../../src/charge_analyzer.h"
+#include "../../src/port_bridge.h"
 #include "../../src/port_history.h"
 #include "../../src/port_reader.h"
+#include "../support/port_fixtures.h"
 
 namespace {
 
 PortReading mk(uint16_t v_mV, uint16_t i_mA, bool attached = true) {
-  PortReading r{};
-  r.v_mV   = v_mV;
-  r.i_c_mA = i_mA;
-  r.i_a_mA = 0;
-  r.proto  = Protocol::Pd30;
-  r.err    = PortError::Ok;
-  r.set_rail(Rail::UsbC, attached);
-  return r;
-}
-
-HistorySample to_sample(const PortReading& r) {
-  HistorySample s{};
-  s.v_mV   = r.v_mV;
-  s.i_c_mA = r.i_c_mA;
-  s.i_a_mA = r.i_a_mA;
-  s.proto  = (uint8_t)r.proto;
-  s.flags  = r.attached() ? kFlagAttached : 0;
-  return s;
+  return test_support::make_reading_c(v_mV, i_mA, attached);
 }
 
 void fill(PortHistory& h, const PortReading& r, size_t n) {

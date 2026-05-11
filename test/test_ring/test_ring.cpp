@@ -4,21 +4,16 @@
 #include <unity.h>
 
 #include "../../src/port_history.h"
+#include "../support/port_fixtures.h"
+
+using test_support::make_sample_c;
 
 namespace {
 
+// Wrapper kept for brevity at call sites within this file.
 HistorySample mk(uint16_t v_mV, uint16_t i_mA, uint8_t proto = 0,
                  bool attached = true) {
-  HistorySample s{};
-  s.v_mV   = v_mV;
-  // Existing tests treat i_mA as the whole port's current; route it
-  // through USB-C so per-rail and total queries see the same number.
-  s.i_c_mA = i_mA;
-  s.i_a_mA = 0;
-  s.proto  = proto;
-  s.flags  = attached ? 0x01 : 0x00;
-  s.reserved = 0;
-  return s;
+  return make_sample_c(v_mV, i_mA, proto, attached);
 }
 
 }  // namespace
