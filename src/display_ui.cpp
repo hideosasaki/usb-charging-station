@@ -45,6 +45,26 @@ constexpr int16_t kRowH       = 16;
 constexpr uint16_t kProgressFill   = kAccentOk;
 constexpr uint16_t kProgressBorder = kFrameColor;
 
+// Dual-rail tile coordinates. Used only when rail_mask == 0x3.
+// Both rails render the same four rows; the divider sits between them.
+struct RailRowYs {
+  int16_t pill;
+  int16_t power;
+  int16_t progress;
+  int16_t eta;
+};
+// The C pill sits at the same Y as the single-rail pill so the gap
+// below the "Port N" header is consistent across layouts. The two
+// rails are separated by 16 px of empty space — the rail pill labels
+// ("Type-C ..." / "Type-A ...") are enough to tell them apart without
+// a drawn border.
+constexpr RailRowYs kDualCRows = {30,  54,  84,  98};
+constexpr RailRowYs kDualARows = {130, 154, 184, 198};
+
+const char* rail_short_name(Rail r) {
+  return r == Rail::UsbC ? "Type-C" : "Type-A";
+}
+
 int16_t col_left(uint8_t i) { return i * kColW + kColPadL; }
 int16_t col_right(uint8_t i) {
   int16_t edge = (i + 1) * kColW + (i == 2 ? kColSlack : 0);
@@ -82,6 +102,15 @@ void clear_row(uint8_t col, int16_t y, int16_t h) {
   display_tft().fillRect(col_left(col), y, col_width(col), h, kBgColor);
 }
 
+// Wipe everything below the "Port N" header. Used on a layout switch
+// (single <-> dual) so stale rows from the previous layout do not
+// bleed through the next frame.
+void clear_tile_body(uint8_t col) {
+  int16_t y = kHeaderY + kRowH;
+  display_tft().fillRect(col_left(col), y, col_width(col),
+                         kBodyBottom - y, kBgColor);
+}
+
 void draw_text(uint8_t col, int16_t y, int16_t h, uint16_t fg,
                const char* text, uint8_t font) {
   auto& t = display_tft();
@@ -90,20 +119,41 @@ void draw_text(uint8_t col, int16_t y, int16_t h, uint16_t fg,
   t.drawString(text, col_left(col), y, font);
 }
 
-void draw_pill(uint8_t col, Protocol proto, bool attached) {
+void draw_pill_at(uint8_t col, int16_t y, const char* name, uint16_t bg) {
   auto&   t = display_tft();
   int16_t x = col_left(col);
   int16_t w = col_width(col);
-  t.fillRect(x, kPillY, w, kPillH, kBgColor);
-  if (!attached || proto == Protocol::None) return;
-  const char* name = protocol_name(proto);
-  int16_t     tw   = t.textWidth(name, 2);
-  int16_t     pw   = tw + 12;
+  t.fillRect(x, y, w, kPillH, kBgColor);
+  if (!name || !*name) return;
+  int16_t tw = t.textWidth(name, 2);
+  int16_t pw = tw + 12;
   if (pw > w) pw = w;
-  uint16_t bg = proto_color(proto);
-  t.fillRoundRect(x, kPillY, pw, kPillH, 4, bg);
+  t.fillRoundRect(x, y, pw, kPillH, 4, bg);
   t.setTextColor(TFT_WHITE, bg);
-  t.drawString(name, x + 6, kPillY + 1, 2);
+  t.drawString(name, x + 6, y + 1, 2);
+}
+
+void draw_pill(uint8_t col, Protocol proto, bool attached) {
+  if (!attached || proto == Protocol::None) {
+    draw_pill_at(col, kPillY, nullptr, kBgColor);
+    return;
+  }
+  draw_pill_at(col, kPillY, protocol_name(proto), proto_color(proto));
+}
+
+// Label for a rail-tagged pill: "Type-C PROTO" / "Type-A 5V". The rail
+// prefix tells the user which connector this row represents when both
+// rails are active.
+void draw_rail_pill(uint8_t col, int16_t y, Rail rail, Protocol proto,
+                    bool attached) {
+  if (!attached) {
+    draw_pill_at(col, y, nullptr, kBgColor);
+    return;
+  }
+  char label[16];
+  snprintf(label, sizeof(label), "%s %s",
+           rail_short_name(rail), protocol_name(proto));
+  draw_pill_at(col, y, label, proto_color(proto));
 }
 
 void draw_clock_icon(int16_t cx, int16_t cy) {
@@ -178,29 +228,34 @@ void format_va(char* buf, size_t n, uint16_t v_mV, uint16_t i_mA,
   snprintf(buf, n, "%s  %s", v, a);
 }
 
-void draw_power(uint8_t col, uint32_t w_mW, bool attached) {
+void draw_power_at(uint8_t col, int16_t y, uint32_t w_mW, bool attached) {
   auto&   t = display_tft();
   int16_t x = col_left(col);
-  t.fillRect(x, kPowerY, col_width(col), kPowerH, kBgColor);
+  t.fillRect(x, y, col_width(col), kPowerH, kBgColor);
   if (!attached) {
     t.setTextColor(kSubColor, kBgColor);
-    t.drawString("--", x, kPowerY, 4);
+    t.drawString("--", x, y, 4);
     return;
   }
   char buf[16];
   format_centi(buf, sizeof(buf), w_mW, true, 'W');
   t.setTextColor(kValueColor, kBgColor);
-  t.drawString(buf, x, kPowerY, 4);
+  t.drawString(buf, x, y, 4);
 }
 
-void draw_eta_row(uint8_t col, Phase phase, EtaSeconds eta, bool attached) {
-  if (!attached) { clear_row(col, kEtaY, kRowH); return; }
+void draw_power(uint8_t col, uint32_t w_mW, bool attached) {
+  draw_power_at(col, kPowerY, w_mW, attached);
+}
+
+void draw_eta_row_at(uint8_t col, int16_t y, Phase phase, EtaSeconds eta,
+                     bool attached) {
+  if (!attached) { clear_row(col, y, kRowH); return; }
   if (phase == Phase::Idle) {
-    draw_text(col, kEtaY, kRowH, kSubColor, "Standby", 2);
+    draw_text(col, y, kRowH, kSubColor, "Standby", 2);
     return;
   }
   if (phase == Phase::Done) {
-    draw_text(col, kEtaY, kRowH, kAccentOk, "Done", 2);
+    draw_text(col, y, kRowH, kAccentOk, "Done", 2);
     return;
   }
   char        body_buf[16];
@@ -222,23 +277,32 @@ void draw_eta_row(uint8_t col, Phase phase, EtaSeconds eta, bool attached) {
   }
   char buf[24];
   snprintf(buf, sizeof(buf), "ETA %s", body);
-  draw_text(col, kEtaY, kRowH, kValueColor, buf, 2);
+  draw_text(col, y, kRowH, kValueColor, buf, 2);
+}
+
+void draw_eta_row(uint8_t col, Phase phase, EtaSeconds eta, bool attached) {
+  draw_eta_row_at(col, kEtaY, phase, eta, attached);
 }
 
 inline uint32_t centi(uint32_t milli) { return (milli + 5) / 10; }
 
-void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
+void draw_progress_bar_at(uint8_t col, int16_t y, uint8_t pct, bool valid,
+                          bool attached) {
   auto&   t = display_tft();
   int16_t x = col_left(col);
   int16_t w = col_width(col);
-  clear_row(col, kProgressY, kProgressH);
+  clear_row(col, y, kProgressH);
   if (!attached) return;
-  t.drawRect(x, kProgressY, w, kProgressH, kProgressBorder);
+  t.drawRect(x, y, w, kProgressH, kProgressBorder);
   if (!valid) return;
   int16_t fill = (int16_t)((uint32_t)(w - 2) * pct / 100u);
   if (fill > 0) {
-    t.fillRect(x + 1, kProgressY + 1, fill, kProgressH - 2, kProgressFill);
+    t.fillRect(x + 1, y + 1, fill, kProgressH - 2, kProgressFill);
   }
+}
+
+void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
+  draw_progress_bar_at(col, kProgressY, pct, valid, attached);
 }
 
 void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
@@ -260,12 +324,42 @@ uint16_t avg_i_full_window(const PortHistory* h, size_t seconds, Rail rail) {
   return h->avg_i_mA(seconds, rail);
 }
 
-EtaSeconds compute_eta(const PortSnapshot& p) {
-  if (!p.live.attached()) return {0, false};
-  Rail     rail   = p.live.active_rail();
+EtaSeconds compute_eta_for(const PortSnapshot& p, Rail rail) {
+  if (!p.live.has(rail)) return {0, false};
   uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s, rail);
   uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s, rail);
-  return eta_seconds(p.live.i_mA(rail), recent, old, p.active_phase());
+  return eta_seconds(p.live.i_mA(rail), recent, old,
+                     p.phase[(uint8_t)rail]);
+}
+
+EtaSeconds compute_eta(const PortSnapshot& p) {
+  return compute_eta_for(p, p.live.active_rail());
+}
+
+// Render one rail's stack (pill / power / progress / ETA) at the given
+// row coordinates. Used by the dual-rail tile layout.
+void draw_rail_stack(uint8_t col, Rail rail, const PortSnapshot& p,
+                     const RailRowYs& rows) {
+  bool     att  = p.live.has(rail);
+  uint16_t i_mA = p.live.i_mA(rail);
+  Phase    ph   = p.phase[(uint8_t)rail];
+  const SessionStats& sess = p.session[(uint8_t)rail];
+
+  draw_rail_pill(col, rows.pill, rail, p.live.proto, att);
+  draw_power_at(col, rows.power, power_mW(p.live.v_mV, i_mA), att);
+
+  ChargeProgress prog = att
+      ? charge_progress(sess.peak_i_mA, i_mA, ph)
+      : ChargeProgress{0, false};
+  draw_progress_bar_at(col, rows.progress, prog.pct, prog.valid, att);
+
+  EtaSeconds eta = compute_eta_for(p, rail);
+  draw_eta_row_at(col, rows.eta, ph, eta, att);
+}
+
+void draw_dual_tile(uint8_t col, const PortSnapshot& p) {
+  draw_rail_stack(col, Rail::UsbC, p, kDualCRows);
+  draw_rail_stack(col, Rail::UsbA, p, kDualARows);
 }
 
 }  // namespace
@@ -282,6 +376,27 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     const PortSnapshot& p = ports[i];
     bool     live_att  = p.live.attached();
     uint16_t live_i_mA = p.live.total_i_mA();
+    Cache&   c         = last_[i];
+
+    // Layout switches (single <-> dual) repaint the whole tile so stale
+    // rows from the other layout do not bleed through.
+    if (c.valid && c.rail_mask != p.live.rail_mask) {
+      clear_tile_body(i);
+      c.valid = false;
+    }
+
+    if (p.live.rail_mask == 0x3) {
+      draw_dual_tile(i, p);
+      // The single-rail value fields (w_mW, proto, phase, ...) do not
+      // describe dual mode; zero the cache so a future re-entry to
+      // single mode doesn't compare against stale values.
+      c = Cache{};
+      c.rail_mask = p.live.rail_mask;
+      c.attached  = true;
+      c.valid     = true;
+      continue;
+    }
+
     const SessionStats& sess  = p.active_session();
     Phase               phase = p.active_phase();
     uint32_t w_mW = power_mW(p.live.v_mV, live_i_mA);
@@ -290,7 +405,6 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     uint32_t ci   = centi(live_i_mA);
     uint32_t es   = session_elapsed_s(sess, now_ms);
     uint32_t ce   = centi(sess.energy_mWh);
-    Cache&   c    = last_[i];
     bool     init = !c.valid;
     bool     att  = init || c.attached != live_att;
 
@@ -340,6 +454,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     c.proto          = (uint8_t)p.live.proto;
     c.phase          = (uint8_t)phase;
     c.progress_pct   = prog.pct;
+    c.rail_mask      = p.live.rail_mask;
     c.progress_valid = prog.valid;
     c.eta_valid      = eta.valid;
     c.attached       = live_att;

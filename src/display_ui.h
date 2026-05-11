@@ -42,6 +42,7 @@ class DisplayUi {
     uint8_t  proto;
     uint8_t  phase;
     uint8_t  progress_pct;
+    uint8_t  rail_mask;      // last drawn layout key
     bool     progress_valid;
     bool     eta_valid;
     bool     attached;
