@@ -71,23 +71,17 @@ PortReading Sw3518PortReader::read(uint32_t now_ms) {
   uint16_t i_c_mA = chip_.iout_usbc_mA;
   uint16_t i_a_mA = chip_.iout_usba_mA;
 
-  uint8_t mask = 0;
+  r.v_mV   = v_mV;
+  r.i_c_mA = i_c_mA;
+  r.i_a_mA = i_a_mA;
   // Vbus is shared, so a healthy 5V+ rail with no measurable current is
   // ambiguous between the two connectors. Bias toward USB-C, which is the
   // negotiable side; the A flag fires only when actual current is seen.
-  if (v_mV >= kAttachedVThreshold_mV || i_c_mA >= kAttachedIThreshold_mA) {
-    mask |= kRailMaskC;
-  }
-  if (i_a_mA >= kAttachedIThreshold_mA) {
-    mask |= kRailMaskA;
-  }
-
-  r.v_mV      = v_mV;
-  r.i_c_mA    = i_c_mA;
-  r.i_a_mA    = i_a_mA;
-  r.rail_mask = mask;
-  r.attached  = (mask != 0);
-  r.proto     = map_protocol(fc, (mask & kRailMaskC) != 0, v_mV);
+  r.set_rail(Rail::UsbC,
+             v_mV >= kAttachedVThreshold_mV ||
+             i_c_mA >= kAttachedIThreshold_mA);
+  r.set_rail(Rail::UsbA, i_a_mA >= kAttachedIThreshold_mA);
+  r.proto = map_protocol(fc, r.has_c(), v_mV);
 
   // The vendored driver returns 0 on I2C read error, so a dead bus
   // looks identical to an idle port. Best we can do: assume the bus

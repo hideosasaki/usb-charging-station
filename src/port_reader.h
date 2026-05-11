@@ -28,8 +28,6 @@ enum class PortError : uint8_t {
 // negotiated protocol are shared (the chip routes one voltage rail to
 // either or both connectors). Currents are per-rail.
 enum class Rail : uint8_t { UsbC = 0, UsbA = 1 };
-constexpr uint8_t kRailMaskC = 0x1;
-constexpr uint8_t kRailMaskA = 0x2;
 
 struct PortReading {
   uint32_t  t_ms;
@@ -39,19 +37,33 @@ struct PortReading {
   Protocol  proto;      // applies to the USB-C rail; USB-A is implicit Std5V
   PortError err;
   uint8_t   rail_mask;  // bit0=C attached, bit1=A attached
-  bool      attached;   // equivalent to rail_mask != 0
+
+  bool has(Rail rail) const { return (rail_mask & bit_for(rail)) != 0; }
+  bool has_c()        const { return has(Rail::UsbC); }
+  bool has_a()        const { return has(Rail::UsbA); }
+  bool attached()     const { return rail_mask != 0; }
+
+  uint16_t i_mA(Rail rail) const {
+    return rail == Rail::UsbC ? i_c_mA : i_a_mA;
+  }
+  // Vbus is shared, so port power equals V * (Ic + Ia) regardless of
+  // which connector is delivering current.
+  uint16_t total_i_mA() const {
+    return static_cast<uint16_t>(
+        static_cast<uint32_t>(i_c_mA) + static_cast<uint32_t>(i_a_mA));
+  }
+
+  void set_rail(Rail rail, bool on) {
+    uint8_t bit = bit_for(rail);
+    rail_mask = on ? (rail_mask | bit) : (rail_mask & ~bit);
+  }
+  void clear_rails() { rail_mask = 0; }
+
+ private:
+  static constexpr uint8_t bit_for(Rail r) {
+    return r == Rail::UsbC ? 0x1 : 0x2;
+  }
 };
-
-inline uint16_t reading_i_mA(const PortReading& r, Rail rail) {
-  return rail == Rail::UsbC ? r.i_c_mA : r.i_a_mA;
-}
-
-// Sum of both rails. Vbus is shared, so the total power drawn from the
-// port is V * (Ic + Ia) regardless of which connector is delivering it.
-inline uint16_t reading_total_i_mA(const PortReading& r) {
-  return static_cast<uint16_t>(
-      static_cast<uint32_t>(r.i_c_mA) + static_cast<uint32_t>(r.i_a_mA));
-}
 
 class PortReader {
  public:

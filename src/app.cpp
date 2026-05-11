@@ -56,7 +56,7 @@ HistorySample to_sample(const PortReading& r) {
   s.i_c_mA = r.i_c_mA;
   s.i_a_mA = r.i_a_mA;
   s.proto  = (uint8_t)r.proto;
-  s.flags  = (r.attached ? kFlagAttached : 0) |
+  s.flags  = (r.attached() ? kFlagAttached : 0) |
              (r.err != PortError::Ok ? kFlagError : 0);
   return s;
 }
@@ -115,15 +115,17 @@ void app_loop() {
     snap[i].session = session[i];
     snap[i].history = &history[i];
 
-    if (r.attached) total_mW += power_mW(r.v_mV, reading_total_i_mA(r));
+    if (r.attached()) total_mW += power_mW(r.v_mV, r.total_i_mA());
 
     // Skip the trace when nothing is plugged in or when no host is
     // reading from CDC, both to keep the log signal high and to avoid
     // blocking on a full USB TX buffer with no consumer.
-    if (Serial && (r.attached || r.err != PortError::Ok)) {
-      Serial.printf("[t=%lus] port%u: mask=0x%x V=%umV Ic=%umA Ia=%umA proto=%s err=%s\n",
+    if (Serial && (r.attached() || r.err != PortError::Ok)) {
+      const char* rails = r.has_c() ? (r.has_a() ? "C+A" : "C")
+                                    : (r.has_a() ? "A" : "-");
+      Serial.printf("[t=%lus] port%u: rails=%s V=%umV Ic=%umA Ia=%umA proto=%s err=%s\n",
                     (unsigned long)(now / 1000), i,
-                    r.rail_mask, r.v_mV, r.i_c_mA, r.i_a_mA,
+                    rails, r.v_mV, r.i_c_mA, r.i_a_mA,
                     protocol_name(r.proto), err_name(r.err));
     }
   }

@@ -43,27 +43,27 @@ void test_unknown_command(void) {
 void test_port_detach(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("port 0 detach"));
   PortReading r = r0.read(10'000);  // would normally be attached at t=10s
-  TEST_ASSERT_FALSE(r.attached);
+  TEST_ASSERT_FALSE(r.attached());
 }
 
 void test_port_attach(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("port 0 attach"));
   PortReading r = r0.read(0);  // would normally be detached at t=0
-  TEST_ASSERT_TRUE(r.attached);
+  TEST_ASSERT_TRUE(r.attached());
 }
 
 void test_port_auto_restores_scenario(void) {
   run("port 0 detach");
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("port 0 auto"));
   PortReading r = r0.read(10'000);
-  TEST_ASSERT_TRUE(r.attached);
+  TEST_ASSERT_TRUE(r.attached());
 }
 
 void test_port_override_fixed_value(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok,
                        (int)run("port 0 9000 2050 PD30"));
   PortReading r = r0.read(0);  // even when scenario says detached
-  TEST_ASSERT_TRUE(r.attached);
+  TEST_ASSERT_TRUE(r.attached());
   TEST_ASSERT_EQUAL_UINT16(9000, r.v_mV);
   TEST_ASSERT_EQUAL_UINT16(2050, r.i_c_mA);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Pd30, (uint8_t)r.proto);
@@ -91,7 +91,7 @@ void test_port_bad_args(void) {
 void test_scenario_switch(void) {
   TEST_ASSERT_EQUAL_INT((int)CmdResult::Ok, (int)run("scenario 0 B"));
   PortReading r = r0.read(0);
-  TEST_ASSERT_TRUE(r.attached);
+  TEST_ASSERT_TRUE(r.attached());
   TEST_ASSERT_EQUAL_UINT16(5000, r.v_mV);
 }
 

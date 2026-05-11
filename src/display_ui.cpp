@@ -261,10 +261,10 @@ uint16_t avg_i_full_window(const PortHistory* h, size_t seconds) {
 }
 
 EtaSeconds compute_eta(const PortSnapshot& p) {
-  if (!p.live.attached) return {0, false};
+  if (!p.live.attached()) return {0, false};
   uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s);
   uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s);
-  return eta_seconds(reading_total_i_mA(p.live), recent, old, p.phase);
+  return eta_seconds(p.live.total_i_mA(), recent, old, p.phase);
 }
 
 }  // namespace
@@ -278,8 +278,9 @@ void DisplayUi::begin() {
 void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
                        uint32_t now_ms) {
   for (uint8_t i = 0; i < 3; ++i) {
-    const PortSnapshot& p    = ports[i];
-    uint16_t live_i_mA = reading_total_i_mA(p.live);
+    const PortSnapshot& p = ports[i];
+    bool     live_att  = p.live.attached();
+    uint16_t live_i_mA = p.live.total_i_mA();
     uint32_t w_mW = power_mW(p.live.v_mV, live_i_mA);
     uint32_t cw   = centi(w_mW);
     uint32_t cv   = centi(p.live.v_mV);
@@ -288,24 +289,24 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     uint32_t ce   = centi(p.session.energy_mWh);
     Cache&   c    = last_[i];
     bool     init = !c.valid;
-    bool     att  = init || c.attached != p.live.attached;
+    bool     att  = init || c.attached != live_att;
 
     if (att || c.proto != (uint8_t)p.live.proto) {
-      draw_pill(i, p.live.proto, p.live.attached);
+      draw_pill(i, p.live.proto, live_att);
     }
     if (att || c.w_mW != cw) {
-      draw_power(i, w_mW, p.live.attached);
+      draw_power(i, w_mW, live_att);
     }
     if (att || c.v_mV != cv || c.i_mA != ci) {
       char buf[24];
-      format_va(buf, sizeof(buf), p.live.v_mV, live_i_mA, p.live.attached);
+      format_va(buf, sizeof(buf), p.live.v_mV, live_i_mA, live_att);
       draw_text(i, kVAY, kRowH, kSubColor, buf, 2);
     }
     if (att || c.elapsed_s != es) {
-      draw_clock_row(i, es, p.live.attached, att);
+      draw_clock_row(i, es, live_att, att);
     }
 
-    ChargeProgress prog = p.live.attached
+    ChargeProgress prog = live_att
         ? charge_progress(p.session.peak_i_mA, live_i_mA, p.phase)
         : ChargeProgress{0, false};
     EtaSeconds     eta = compute_eta(p);
@@ -318,13 +319,13 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
                        c.eta_valid != eta.valid ||
                        c.phase != (uint8_t)p.phase;
     if (att || prog_changed) {
-      draw_progress_bar(i, prog.pct, prog.valid, p.live.attached);
+      draw_progress_bar(i, prog.pct, prog.valid, live_att);
     }
     if (att || eta_changed) {
-      draw_eta_row(i, p.phase, eta, p.live.attached);
+      draw_eta_row(i, p.phase, eta, live_att);
     }
     if (att || c.energy_cWh != ce) {
-      draw_energy_row(i, ce, p.live.attached);
+      draw_energy_row(i, ce, live_att);
     }
 
     c.v_mV           = (uint16_t)cv;
@@ -338,7 +339,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     c.progress_pct   = prog.pct;
     c.progress_valid = prog.valid;
     c.eta_valid      = eta.valid;
-    c.attached       = p.live.attached;
+    c.attached       = live_att;
     c.valid          = true;
   }
 

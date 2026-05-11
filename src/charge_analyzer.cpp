@@ -17,8 +17,8 @@ constexpr size_t   kDoneWindow_s     = 30;
 }  // namespace
 
 Phase analyze(const PortHistory& h, const PortReading& now) {
-  uint16_t now_i_mA = reading_total_i_mA(now);
-  if (!now.attached || now_i_mA < kIdleCurrent_mA) return Phase::Idle;
+  uint16_t now_i_mA = now.total_i_mA();
+  if (!now.attached() || now_i_mA < kIdleCurrent_mA) return Phase::Idle;
 
   if (now.v_mV >= kHighVoltage_mV) {
     // CV is detected as a sustained drop from the older window to the

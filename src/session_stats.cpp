@@ -14,18 +14,19 @@ void session_reset(SessionStats& s) {
 void session_update(SessionStats& s, const PortReading& r, uint32_t dt_ms) {
   // Vbus is shared across both rails of the port, so the energy meter
   // tracks V * (Ic + Ia) regardless of which connector is in use.
-  uint16_t i_mA = reading_total_i_mA(r);
+  uint16_t i_mA     = r.total_i_mA();
+  bool     attached = r.attached();
 
-  bool rising = r.attached && !s.last_attached;
+  bool rising = attached && !s.last_attached;
   if (rising) {
     s.start_ms   = r.t_ms;
     s.energy_mWh = 0;
     s.peak_i_mA  = 0;
     s.active     = true;
-  } else if (!r.attached) {
+  } else if (!attached) {
     s.active = false;
   }
-  s.last_attached = r.attached;
+  s.last_attached = attached;
 
   if (s.active) {
     if (i_mA > s.peak_i_mA) s.peak_i_mA = i_mA;

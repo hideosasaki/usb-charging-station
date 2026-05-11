@@ -37,7 +37,7 @@ uint16_t PortHistory::avg_i_mA(size_t seconds, Rail rail) const {
   uint32_t sum = 0;
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
-    sum += sample_i_mA(buf_[cur.idx], rail);
+    sum += buf_[cur.idx].i_mA(rail);
     cur.advance(kCapacity);
   }
   return static_cast<uint16_t>(sum / n);
@@ -49,7 +49,7 @@ uint16_t PortHistory::avg_total_i_mA(size_t seconds) const {
   uint32_t sum = 0;
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
-    sum += sample_total_i_mA(buf_[cur.idx]);
+    sum += buf_[cur.idx].total_i_mA();
     cur.advance(kCapacity);
   }
   return static_cast<uint16_t>(sum / n);
@@ -70,7 +70,7 @@ void PortHistory::power_range_mW(size_t seconds, uint32_t& lo,
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
     const auto& s  = buf_[cur.idx];
-    uint32_t    vi = static_cast<uint32_t>(s.v_mV) * sample_total_i_mA(s);
+    uint32_t    vi = static_cast<uint32_t>(s.v_mV) * s.total_i_mA();
     if (vi < mn) mn = vi;
     if (vi > mx) mx = vi;
     cur.advance(kCapacity);
@@ -101,7 +101,7 @@ void PortHistory::power_downsample_mW(uint32_t* out, size_t count,
     size_t   n      = 0;
     for (size_t k = 0; k < width && covered > 0; ++k) {
       const auto& s = buf_[cur.idx];
-      sum_vi += static_cast<uint32_t>(s.v_mV) * sample_total_i_mA(s);
+      sum_vi += static_cast<uint32_t>(s.v_mV) * s.total_i_mA();
       cur.advance(kCapacity);
       --covered;
       ++n;

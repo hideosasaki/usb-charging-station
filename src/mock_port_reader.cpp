@@ -74,42 +74,38 @@ int16_t MockPortReader::jitter_permille() {
 PortReading MockPortReader::sample_scenario(uint32_t now_ms) const {
   Nominal n = nominal_for(scenario_, now_ms);
   PortReading r{};
-  r.t_ms      = now_ms;
-  r.v_mV      = n.v_mV;
-  r.i_c_mA    = n.i_mA;
-  r.proto     = n.proto;
-  r.err       = PortError::Ok;
-  r.attached  = n.attached;
-  r.rail_mask = n.attached ? kRailMaskC : 0;
+  r.t_ms   = now_ms;
+  r.v_mV   = n.v_mV;
+  r.i_c_mA = n.i_mA;
+  r.proto  = n.proto;
+  r.err    = PortError::Ok;
+  r.set_rail(Rail::UsbC, n.attached);
   return r;
 }
 
 PortReading MockPortReader::read(uint32_t now_ms) {
   PortReading r{};
   if (has_override_) {
-    r.t_ms      = now_ms;
-    r.v_mV      = ov_v_mV_;
-    r.i_c_mA    = ov_i_mA_;
-    r.proto     = ov_proto_;
-    r.err       = PortError::Ok;
-    r.attached  = true;
-    r.rail_mask = kRailMaskC;
+    r.t_ms   = now_ms;
+    r.v_mV   = ov_v_mV_;
+    r.i_c_mA = ov_i_mA_;
+    r.proto  = ov_proto_;
+    r.err    = PortError::Ok;
+    r.set_rail(Rail::UsbC, true);
   } else {
     r = sample_scenario(now_ms);
     if (force_ == Force::Detach) {
-      r.attached  = false;
-      r.rail_mask = 0;
+      r.clear_rails();
       r.v_mV = r.i_c_mA = r.i_a_mA = 0;
       r.proto = Protocol::None;
     } else {
-      if (force_ == Force::Attach && !r.attached) {
-        r.v_mV      = 5000;
-        r.i_c_mA    = 300;
-        r.proto     = Protocol::Std5V;
-        r.attached  = true;
-        r.rail_mask = kRailMaskC;
+      if (force_ == Force::Attach && !r.attached()) {
+        r.v_mV   = 5000;
+        r.i_c_mA = 300;
+        r.proto  = Protocol::Std5V;
+        r.set_rail(Rail::UsbC, true);
       }
-      if (r.attached && r.i_c_mA > 0) {
+      if (r.attached() && r.i_c_mA > 0) {
         int32_t j = jitter_permille();
         int32_t i = (int32_t)r.i_c_mA * (1000 + j) / 1000;
         if (i < 0) i = 0;

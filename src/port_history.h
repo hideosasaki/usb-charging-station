@@ -30,17 +30,16 @@ struct HistorySample {
   uint8_t  proto;
   uint8_t  flags;      // see kFlag*; rail-mask bits live in bits 2..3
   uint32_t reserved;
+
+  uint16_t i_mA(Rail rail) const {
+    return rail == Rail::UsbC ? i_c_mA : i_a_mA;
+  }
+  uint32_t total_i_mA() const {
+    return static_cast<uint32_t>(i_c_mA) + static_cast<uint32_t>(i_a_mA);
+  }
 };
 static_assert(sizeof(HistorySample) == 12,
               "HistorySample size assumption changed; revisit SRAM budget");
-
-inline uint16_t sample_i_mA(const HistorySample& s, Rail rail) {
-  return rail == Rail::UsbC ? s.i_c_mA : s.i_a_mA;
-}
-
-inline uint32_t sample_total_i_mA(const HistorySample& s) {
-  return static_cast<uint32_t>(s.i_c_mA) + static_cast<uint32_t>(s.i_a_mA);
-}
 
 class PortHistory {
  public:
