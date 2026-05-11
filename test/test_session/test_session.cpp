@@ -74,6 +74,23 @@ void test_reset_clears_all(void) {
   TEST_ASSERT_FALSE(s.active);
   TEST_ASSERT_EQUAL_UINT32(0, s.energy_mWh);
   TEST_ASSERT_EQUAL_UINT32(0, s.start_ms);
+  TEST_ASSERT_EQUAL_UINT16(0, s.peak_i_mA);
+}
+
+void test_peak_current_is_session_max(void) {
+  SessionStats s{};
+  session_update(s, mk(5000, 300, true, 0), 1000);
+  session_update(s, mk(9000, 2000, true, 1000), 1000);
+  session_update(s, mk(9000, 1500, true, 2000), 1000);
+  TEST_ASSERT_EQUAL_UINT16(2000, s.peak_i_mA);
+}
+
+void test_peak_resets_on_reattach(void) {
+  SessionStats s{};
+  session_update(s, mk(9000, 2000, true, 0), 1000);
+  session_update(s, mk(0, 0, false, 1000), 1000);
+  session_update(s, mk(5000, 300, true, 2000), 1000);
+  TEST_ASSERT_EQUAL_UINT16(300, s.peak_i_mA);
 }
 
 void setUp(void) {}
@@ -87,5 +104,7 @@ int main(int, char**) {
   RUN_TEST(test_reattach_resets_energy_and_start);
   RUN_TEST(test_energy_scales_with_dt);
   RUN_TEST(test_reset_clears_all);
+  RUN_TEST(test_peak_current_is_session_max);
+  RUN_TEST(test_peak_resets_on_reattach);
   return UNITY_END();
 }

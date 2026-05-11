@@ -77,6 +77,35 @@ void test_done_after_neardone_persists(void) {
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Done, (uint8_t)analyze(h, now));
 }
 
+void test_progress_invalid_when_peak_below_threshold(void) {
+  ChargeProgress p = charge_progress(300, 300, Phase::CC);
+  TEST_ASSERT_FALSE(p.valid);
+}
+
+void test_progress_zero_at_cc_peak(void) {
+  ChargeProgress p = charge_progress(2000, 2000, Phase::CC);
+  TEST_ASSERT_TRUE(p.valid);
+  TEST_ASSERT_EQUAL_UINT8(0, p.pct);
+}
+
+void test_progress_half_in_cv(void) {
+  ChargeProgress p = charge_progress(2000, 1000, Phase::CV);
+  TEST_ASSERT_TRUE(p.valid);
+  TEST_ASSERT_EQUAL_UINT8(50, p.pct);
+}
+
+void test_progress_high_near_done(void) {
+  ChargeProgress p = charge_progress(2000, 200, Phase::NearDone);
+  TEST_ASSERT_TRUE(p.valid);
+  TEST_ASSERT_EQUAL_UINT8(90, p.pct);
+}
+
+void test_progress_clamps_at_100_when_done(void) {
+  ChargeProgress p = charge_progress(0, 0, Phase::Done);
+  TEST_ASSERT_TRUE(p.valid);
+  TEST_ASSERT_EQUAL_UINT8(100, p.pct);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -88,5 +117,10 @@ int main(int, char**) {
   RUN_TEST(test_cv_high_v_falling_i);
   RUN_TEST(test_neardone_low_v_short_history);
   RUN_TEST(test_done_after_neardone_persists);
+  RUN_TEST(test_progress_invalid_when_peak_below_threshold);
+  RUN_TEST(test_progress_zero_at_cc_peak);
+  RUN_TEST(test_progress_half_in_cv);
+  RUN_TEST(test_progress_high_near_done);
+  RUN_TEST(test_progress_clamps_at_100_when_done);
   return UNITY_END();
 }

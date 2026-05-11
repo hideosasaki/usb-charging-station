@@ -11,6 +11,7 @@
 struct SessionStats {
   uint32_t start_ms;
   uint32_t energy_mWh;
+  uint16_t peak_i_mA;
   bool     active;
   bool     last_attached;
 };

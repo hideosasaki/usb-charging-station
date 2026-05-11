@@ -26,13 +26,18 @@ constexpr uint16_t kProtoColor  = TFT_CYAN;
 constexpr uint16_t kSubColor    = 0xC618;  // light grey for V/A
 constexpr uint16_t kBgColor     = TFT_BLACK;
 
-constexpr int16_t kHeaderY  = 4;
-constexpr int16_t kPowerY   = 32;
-constexpr int16_t kVAY      = 76;
-constexpr int16_t kProtoY   = 108;
-constexpr int16_t kPhaseY   = 140;
-constexpr int16_t kBigFontH = 26;
-constexpr int16_t kRowH     = 16;
+constexpr int16_t kHeaderY    = 4;
+constexpr int16_t kPowerY     = 32;
+constexpr int16_t kVAY        = 76;
+constexpr int16_t kProtoY     = 108;
+constexpr int16_t kPhaseY     = 140;
+constexpr int16_t kProgressY  = 168;
+constexpr int16_t kProgressH  = 10;
+constexpr int16_t kEnergyY    = 184;
+constexpr int16_t kBigFontH   = 26;
+constexpr int16_t kRowH       = 16;
+constexpr uint16_t kProgressFill   = TFT_GREEN;
+constexpr uint16_t kProgressBorder = kFrameColor;
 
 int16_t col_left(uint8_t i) { return i * kColW + kColPadL; }
 int16_t col_right(uint8_t i) {
@@ -106,6 +111,35 @@ void format_elapsed(char* buf, size_t n, uint32_t s) {
 
 inline uint32_t centi(uint32_t milli) { return (milli + 5) / 10; }
 
+void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
+  auto&   t = display_tft();
+  int16_t x = col_left(col);
+  int16_t w = col_width(col);
+  clear_row(col, kProgressY, kProgressH);
+  if (!attached) return;
+  t.drawRect(x, kProgressY, w, kProgressH, kProgressBorder);
+  if (!valid) return;
+  int16_t fill = (int16_t)((uint32_t)(w - 2) * pct / 100u);
+  if (fill > 0) {
+    t.fillRect(x + 1, kProgressY + 1, fill, kProgressH - 2, kProgressFill);
+  }
+}
+
+void draw_energy_row(uint8_t col, uint8_t pct, bool valid, uint32_t cwh,
+                     bool attached) {
+  clear_row(col, kEnergyY, kRowH);
+  if (!attached) return;
+  char pct_str[8];
+  if (valid) snprintf(pct_str, sizeof(pct_str), "%u", (unsigned)pct);
+  else       snprintf(pct_str, sizeof(pct_str), "?");
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%s%%  %lu.%02luWh", pct_str,
+           (unsigned long)(cwh / 100), (unsigned long)(cwh % 100));
+  auto& t = display_tft();
+  t.setTextColor(TFT_WHITE, kBgColor);
+  t.drawString(buf, col_left(col), kEnergyY, 2);
+}
+
 }  // namespace
 
 void DisplayUi::begin() {
@@ -157,14 +191,30 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
                 phase_name(p.phase), 2);
     }
 
-    c.v_mV      = (uint16_t)cv;
-    c.i_mA      = (uint16_t)ci;
-    c.w_mW      = cw;
-    c.elapsed_s = es;
-    c.proto     = (uint8_t)p.live.proto;
-    c.phase     = (uint8_t)p.phase;
-    c.attached  = p.live.attached;
-    c.valid     = true;
+    ChargeProgress prog = p.live.attached
+        ? charge_progress(p.session.peak_i_mA, p.live.i_mA, p.phase)
+        : ChargeProgress{0, false};
+    uint32_t ce           = centi(p.session.energy_mWh);
+    bool     prog_changed = c.progress_pct != prog.pct ||
+                            c.progress_valid != prog.valid;
+    if (att || prog_changed) {
+      draw_progress_bar(i, prog.pct, prog.valid, p.live.attached);
+    }
+    if (att || prog_changed || c.energy_cWh != ce) {
+      draw_energy_row(i, prog.pct, prog.valid, ce, p.live.attached);
+    }
+
+    c.v_mV           = (uint16_t)cv;
+    c.i_mA           = (uint16_t)ci;
+    c.w_mW           = cw;
+    c.elapsed_s      = es;
+    c.energy_cWh     = ce;
+    c.proto          = (uint8_t)p.live.proto;
+    c.phase          = (uint8_t)p.phase;
+    c.progress_pct   = prog.pct;
+    c.progress_valid = prog.valid;
+    c.attached       = p.live.attached;
+    c.valid          = true;
   }
 
   uint32_t ct = centi(total_mW);
