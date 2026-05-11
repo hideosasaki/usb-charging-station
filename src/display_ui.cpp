@@ -45,6 +45,24 @@ constexpr int16_t kRowH       = 16;
 constexpr uint16_t kProgressFill   = kAccentOk;
 constexpr uint16_t kProgressBorder = kFrameColor;
 
+// One off-screen buffer wide and tall enough to satisfy every caller of
+// paint_rect(); reusing it avoids per-frame allocations and the static
+// dimensions let the constant fit in flash.
+constexpr int16_t kMaxRowW =
+    (kSummaryClearW > kColW + kColSlack - kColPadL - kColPadR)
+    ? kSummaryClearW
+    : kColW + kColSlack - kColPadL - kColPadR;
+constexpr int16_t kMaxRowH = kPowerH;
+
+// Constructed lazily in DisplayUi::begin() so the TFT_eSPI instance it
+// binds to is guaranteed to exist — a global TFT_eSprite would race the
+// static init order against the TFT_eSPI in display.cpp.
+TFT_eSprite* g_row_sprite = nullptr;
+
+bool row_sprite_ready() {
+  return g_row_sprite && g_row_sprite->created();
+}
+
 // Dual-rail tile coordinates. Used only when rail_mask == 0x3.
 // Both rails render the same four rows; the divider sits between them.
 struct RailRowYs {
@@ -111,26 +129,55 @@ void clear_tile_body(uint8_t col) {
                          kBodyBottom - y, kBgColor);
 }
 
+// Repaint a rectangle through the shared off-screen sprite. The draw
+// functor receives a TFT-like surface plus the origin to draw at:
+// (0, 0) when rendering into the sprite, (x, y) for the direct
+// fallback path that runs only when the sprite could not be allocated.
+// The sprite path is the whole point of this helper — it hides the
+// "fillRect(bg) → drawString" two-step that otherwise lets the eraser
+// flash through to the panel.
+template <typename F>
+void paint_rect(int16_t x, int16_t y, int16_t w, int16_t h, F draw_fn) {
+  if (row_sprite_ready() && w <= kMaxRowW && h <= kMaxRowH) {
+    // Clear only the (w,h) sub-region rather than the whole sprite —
+    // the sprite is sized for the widest caller, so a full fill would
+    // touch up to 2× the pixels actually pushed.
+    g_row_sprite->fillRect(0, 0, w, h, kBgColor);
+    draw_fn(*g_row_sprite, (int16_t)0, (int16_t)0);
+    g_row_sprite->pushSprite(x, y, /*sx=*/0, /*sy=*/0, w, h);
+  } else {
+    auto& t = display_tft();
+    t.fillRect(x, y, w, h, kBgColor);
+    draw_fn(t, x, y);
+  }
+}
+
+template <typename F>
+void paint_row(uint8_t col, int16_t y, int16_t w, int16_t h, F draw_fn) {
+  paint_rect(col_left(col), y, w, h, draw_fn);
+}
+
 void draw_text(uint8_t col, int16_t y, int16_t h, uint16_t fg,
                const char* text, uint8_t font) {
-  auto& t = display_tft();
-  clear_row(col, y, h);
-  t.setTextColor(fg, kBgColor);
-  t.drawString(text, col_left(col), y, font);
+  paint_row(col, y, col_width(col), h,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              t.setTextColor(fg, kBgColor);
+              t.drawString(text, ox, oy, font);
+            });
 }
 
 void draw_pill_at(uint8_t col, int16_t y, const char* name, uint16_t bg) {
-  auto&   t = display_tft();
-  int16_t x = col_left(col);
   int16_t w = col_width(col);
-  t.fillRect(x, y, w, kPillH, kBgColor);
-  if (!name || !*name) return;
-  int16_t tw = t.textWidth(name, 2);
-  int16_t pw = tw + 12;
-  if (pw > w) pw = w;
-  t.fillRoundRect(x, y, pw, kPillH, 4, bg);
-  t.setTextColor(TFT_WHITE, bg);
-  t.drawString(name, x + 6, y + 1, 2);
+  paint_row(col, y, w, kPillH,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              if (!name || !*name) return;
+              int16_t tw = t.textWidth(name, 2);
+              int16_t pw = tw + 12;
+              if (pw > w) pw = w;
+              t.fillRoundRect(ox, oy, pw, kPillH, 4, bg);
+              t.setTextColor(TFT_WHITE, bg);
+              t.drawString(name, ox + 6, oy + 1, 2);
+            });
 }
 
 void draw_pill(uint8_t col, Protocol proto, bool attached) {
@@ -156,8 +203,7 @@ void draw_rail_pill(uint8_t col, int16_t y, Rail rail, Protocol proto,
   draw_pill_at(col, y, label, proto_color(proto));
 }
 
-void draw_clock_icon(int16_t cx, int16_t cy) {
-  auto& t = display_tft();
+void draw_clock_icon(TFT_eSPI& t, int16_t cx, int16_t cy) {
   t.drawCircle(cx, cy, kClockR, kSubColor);
   t.drawLine(cx, cy, cx, cy - (kClockR - 2), kSubColor);
   t.drawLine(cx, cy, cx + (kClockR - 1), cy, kSubColor);
@@ -165,8 +211,8 @@ void draw_clock_icon(int16_t cx, int16_t cy) {
 
 // Font2 ":" packs the two dots so tightly the time is hard to scan, so
 // the separators are drawn by hand with a wider vertical gap.
-void draw_hms(int16_t x, int16_t y, uint32_t total_s, uint16_t fg) {
-  auto& t = display_tft();
+void draw_hms(TFT_eSPI& t, int16_t x, int16_t y, uint32_t total_s,
+              uint16_t fg) {
   t.setTextColor(fg, kBgColor);
   uint32_t h  = total_s / 3600u;
   uint32_t m  = (total_s / 60u) % 60u;
@@ -193,22 +239,15 @@ void draw_hms(int16_t x, int16_t y, uint32_t total_s, uint16_t fg) {
   t.drawString(ss, x, y, 2);
 }
 
-// Repaint policy: the clock face is static, so it is only drawn on the
-// attach edge. The H:MM:SS half clears and rewrites every tick.
-void draw_clock_row(uint8_t col, uint32_t elapsed_s, bool attached,
-                    bool force_full_redraw) {
-  int16_t x = col_left(col);
-  if (force_full_redraw) {
-    clear_row(col, kClockY, kClockRowH);
-    if (!attached) return;
-    draw_clock_icon(x + kClockR, kClockY + kClockRowH / 2);
-  } else if (!attached) {
-    return;
-  }
-  int16_t hms_x = x + 2 * kClockR + 4;
-  auto&   t     = display_tft();
-  t.fillRect(hms_x, kClockY, col_right(col) - hms_x, kClockRowH, kBgColor);
-  draw_hms(hms_x, kClockY, elapsed_s, kValueColor);
+// Atomic per-second repaint: icon and H:MM:SS land in one sprite push,
+// so the row never shows a half-erased intermediate.
+void draw_clock_row(uint8_t col, uint32_t elapsed_s, bool attached) {
+  paint_row(col, kClockY, col_width(col), kClockRowH,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              if (!attached) return;
+              draw_clock_icon(t, ox + kClockR, oy + kClockRowH / 2);
+              draw_hms(t, ox + 2 * kClockR + 4, oy, elapsed_s, kValueColor);
+            });
 }
 
 void format_centi(char* buf, size_t n, uint32_t milli, bool attached,
@@ -229,18 +268,18 @@ void format_va(char* buf, size_t n, uint16_t v_mV, uint16_t i_mA,
 }
 
 void draw_power_at(uint8_t col, int16_t y, uint32_t w_mW, bool attached) {
-  auto&   t = display_tft();
-  int16_t x = col_left(col);
-  t.fillRect(x, y, col_width(col), kPowerH, kBgColor);
-  if (!attached) {
-    t.setTextColor(kSubColor, kBgColor);
-    t.drawString("--", x, y, 4);
-    return;
-  }
-  char buf[16];
-  format_centi(buf, sizeof(buf), w_mW, true, 'W');
-  t.setTextColor(kValueColor, kBgColor);
-  t.drawString(buf, x, y, 4);
+  paint_row(col, y, col_width(col), kPowerH,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              if (!attached) {
+                t.setTextColor(kSubColor, kBgColor);
+                t.drawString("--", ox, oy, 4);
+                return;
+              }
+              char buf[16];
+              format_centi(buf, sizeof(buf), w_mW, true, 'W');
+              t.setTextColor(kValueColor, kBgColor);
+              t.drawString(buf, ox, oy, 4);
+            });
 }
 
 void draw_power(uint8_t col, uint32_t w_mW, bool attached) {
@@ -249,7 +288,7 @@ void draw_power(uint8_t col, uint32_t w_mW, bool attached) {
 
 void draw_eta_row_at(uint8_t col, int16_t y, Phase phase, EtaSeconds eta,
                      bool attached) {
-  if (!attached) { clear_row(col, y, kRowH); return; }
+  if (!attached) { draw_text(col, y, kRowH, kSubColor, "", 2); return; }
   if (phase == Phase::Idle) {
     draw_text(col, y, kRowH, kSubColor, "Standby", 2);
     return;
@@ -288,17 +327,18 @@ inline uint32_t centi(uint32_t milli) { return (milli + 5) / 10; }
 
 void draw_progress_bar_at(uint8_t col, int16_t y, uint8_t pct, bool valid,
                           bool attached) {
-  auto&   t = display_tft();
-  int16_t x = col_left(col);
   int16_t w = col_width(col);
-  clear_row(col, y, kProgressH);
-  if (!attached) return;
-  t.drawRect(x, y, w, kProgressH, kProgressBorder);
-  if (!valid) return;
-  int16_t fill = (int16_t)((uint32_t)(w - 2) * pct / 100u);
-  if (fill > 0) {
-    t.fillRect(x + 1, y + 1, fill, kProgressH - 2, kProgressFill);
-  }
+  paint_row(col, y, w, kProgressH,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              if (!attached) return;
+              t.drawRect(ox, oy, w, kProgressH, kProgressBorder);
+              if (!valid) return;
+              int16_t fill = (int16_t)((uint32_t)(w - 2) * pct / 100u);
+              if (fill > 0) {
+                t.fillRect(ox + 1, oy + 1, fill,
+                           kProgressH - 2, kProgressFill);
+              }
+            });
 }
 
 void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
@@ -306,14 +346,16 @@ void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
 }
 
 void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
-  clear_row(col, kEnergyY, kRowH);
-  if (!attached) return;
-  char buf[24];
-  snprintf(buf, sizeof(buf), "%lu.%02luWh",
-           (unsigned long)(cwh / 100), (unsigned long)(cwh % 100));
-  auto& t = display_tft();
-  t.setTextColor(kValueColor, kBgColor);
-  t.drawString(buf, col_left(col), kEnergyY, 2);
+  paint_row(col, kEnergyY, col_width(col), kRowH,
+            [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+              if (!attached) return;
+              char buf[24];
+              snprintf(buf, sizeof(buf), "%lu.%02luWh",
+                       (unsigned long)(cwh / 100),
+                       (unsigned long)(cwh % 100));
+              t.setTextColor(kValueColor, kBgColor);
+              t.drawString(buf, ox, oy, 2);
+            });
 }
 
 // ETA needs the full averaging window to make a meaningful slope, so
@@ -365,6 +407,11 @@ void draw_dual_tile(uint8_t col, const PortSnapshot& p) {
 }  // namespace
 
 void DisplayUi::begin() {
+  if (!g_row_sprite) {
+    g_row_sprite = new TFT_eSprite(&display_tft());
+    g_row_sprite->setColorDepth(16);
+    g_row_sprite->createSprite(kMaxRowW, kMaxRowH);
+  }
   draw_frame();
   for (auto& c : last_) c.valid = false;
   last_total_mW_ = 0xFFFFFFFFu;
@@ -420,7 +467,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
       draw_text(i, kVAY, kRowH, kSubColor, buf, 2);
     }
     if (att || c.elapsed_s != es) {
-      draw_clock_row(i, es, live_att, att);
+      draw_clock_row(i, es, live_att);
     }
 
     ChargeProgress prog = live_att
@@ -463,14 +510,19 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
 
   uint32_t ct = centi(total_mW);
   if (ct != last_total_mW_) {
-    auto& t = display_tft();
-    char  buf[32];
+    constexpr int16_t kSummaryX = kScreenW - kSummaryClearW;
+    constexpr int16_t kSummaryY = kBodyBottom + 2;
+    constexpr int16_t kSummaryH = kScreenH - kBodyBottom - 2;
+    char buf[32];
     snprintf(buf, sizeof(buf), "Total %lu.%02luW",
              (unsigned long)(ct / 100), (unsigned long)(ct % 100));
-    t.fillRect(kScreenW - kSummaryClearW, kBodyBottom + 2,
-               kSummaryClearW, kScreenH - kBodyBottom - 2, kBgColor);
-    t.setTextColor(kValueColor, kBgColor);
-    t.drawRightString(buf, kScreenW - kSummaryPadR, kBodyBottom + 4, 2);
+    paint_rect(kSummaryX, kSummaryY, kSummaryClearW, kSummaryH,
+               [&](TFT_eSPI& t, int16_t ox, int16_t oy) {
+                 t.setTextColor(kValueColor, kBgColor);
+                 t.drawRightString(buf,
+                                   ox + kSummaryClearW - kSummaryPadR,
+                                   oy + 2, 2);
+               });
     last_total_mW_ = ct;
   }
 }
