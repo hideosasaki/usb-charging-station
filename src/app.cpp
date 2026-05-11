@@ -21,19 +21,23 @@
 
 namespace {
 
-constexpr uint8_t  kWs2812Pin    = 16;
-constexpr uint16_t kWs2812Count  = 1;
-constexpr uint32_t kSampleMs     = 1000;
+constexpr uint8_t  kWs2812Pin     = 16;
+constexpr uint16_t kWs2812Count   = 1;
+constexpr uint32_t kSampleMs      = 1000;
+constexpr uint8_t  kPorts         = 3;
+constexpr uint8_t  kRailsPerPort  = 2;
 
 constexpr uint32_t kHeartbeat[6] = {
     0xFF0000, 0, 0x00FF00, 0, 0x0000FF, 0,
 };
 
+constexpr Rail kRails[kRailsPerPort] = {Rail::UsbC, Rail::UsbA};
+
 Adafruit_NeoPixel pixel(kWs2812Count, kWs2812Pin, NEO_GRB + NEO_KHZ800);
 
-PortReader*  readers[3] = {nullptr, nullptr, nullptr};
-PortHistory  history[3];
-SessionStats session[3]{};
+PortReader*  readers[kPorts] = {nullptr, nullptr, nullptr};
+PortHistory  history[kPorts];                       // Vbus is shared per port
+SessionStats session[kPorts][kRailsPerPort]{};      // indexed by [port][Rail]
 DisplayUi    ui;
 
 uint32_t last_sample_ms  = 0;
@@ -79,16 +83,16 @@ void app_setup() {
   display_hello();
   delay(800);
 
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < kPorts; ++i) {
     readers[i] = make_port_reader(i);
     if (readers[i]) readers[i]->begin();
-    session_reset(session[i]);
+    for (Rail rail : kRails) session_reset(session[i][(uint8_t)rail]);
   }
   ui.begin();
 #if USE_MOCK_PORTS
-  static MockPortReader* mocks[3] = {make_mock_port_reader(0),
-                                     make_mock_port_reader(1),
-                                     make_mock_port_reader(2)};
+  static MockPortReader* mocks[kPorts] = {make_mock_port_reader(0),
+                                          make_mock_port_reader(1),
+                                          make_mock_port_reader(2)};
   serial_cmd_init(mocks);
 #endif
   Serial.println(F("app ready"));
@@ -103,16 +107,19 @@ void app_loop() {
   if (now - last_sample_ms < kSampleMs) return;
   last_sample_ms = now;
 
-  PortSnapshot snap[3];
+  PortSnapshot snap[kPorts];
   uint32_t     total_mW = 0;
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < kPorts; ++i) {
     PortReading r = readers[i] ? readers[i]->read(now) : PortReading{};
     history[i].push(to_sample(r));
-    session_update(session[i], r, kSampleMs);
 
+    for (Rail rail : kRails) {
+      uint8_t idx = (uint8_t)rail;
+      session_update(session[i][idx], r, rail, kSampleMs);
+      snap[i].phase[idx]   = analyze(history[i], rail, r);
+      snap[i].session[idx] = session[i][idx];
+    }
     snap[i].live    = r;
-    snap[i].phase   = analyze(history[i], r);
-    snap[i].session = session[i];
     snap[i].history = &history[i];
 
     if (r.attached()) total_mW += power_mW(r.v_mV, r.total_i_mA());

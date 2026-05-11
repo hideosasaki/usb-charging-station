@@ -12,9 +12,17 @@
 
 struct PortSnapshot {
   PortReading        live;
-  Phase              phase;
-  SessionStats       session;
+  Phase              phase[2];           // indexed by Rail (UsbC=0, UsbA=1)
+  SessionStats       session[2];
   const PortHistory* history;
+
+  // Single-rail UI views use the live reading's active rail.
+  Phase active_phase() const {
+    return phase[(uint8_t)live.active_rail()];
+  }
+  const SessionStats& active_session() const {
+    return session[(uint8_t)live.active_rail()];
+  }
 };
 
 class DisplayUi {

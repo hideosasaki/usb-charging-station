@@ -255,16 +255,17 @@ void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
 // ETA needs the full averaging window to make a meaningful slope, so
 // fall back to zero if PortHistory has fewer samples than requested
 // (PortHistory::avg_i_mA would otherwise average over what it has).
-uint16_t avg_i_full_window(const PortHistory* h, size_t seconds) {
+uint16_t avg_i_full_window(const PortHistory* h, size_t seconds, Rail rail) {
   if (!h || h->size() < seconds) return 0;
-  return h->avg_total_i_mA(seconds);
+  return h->avg_i_mA(seconds, rail);
 }
 
 EtaSeconds compute_eta(const PortSnapshot& p) {
   if (!p.live.attached()) return {0, false};
-  uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s);
-  uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s);
-  return eta_seconds(p.live.total_i_mA(), recent, old, p.phase);
+  Rail     rail   = p.live.active_rail();
+  uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s, rail);
+  uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s, rail);
+  return eta_seconds(p.live.i_mA(rail), recent, old, p.active_phase());
 }
 
 }  // namespace
@@ -281,12 +282,14 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     const PortSnapshot& p = ports[i];
     bool     live_att  = p.live.attached();
     uint16_t live_i_mA = p.live.total_i_mA();
+    const SessionStats& sess  = p.active_session();
+    Phase               phase = p.active_phase();
     uint32_t w_mW = power_mW(p.live.v_mV, live_i_mA);
     uint32_t cw   = centi(w_mW);
     uint32_t cv   = centi(p.live.v_mV);
     uint32_t ci   = centi(live_i_mA);
-    uint32_t es   = session_elapsed_s(p.session, now_ms);
-    uint32_t ce   = centi(p.session.energy_mWh);
+    uint32_t es   = session_elapsed_s(sess, now_ms);
+    uint32_t ce   = centi(sess.energy_mWh);
     Cache&   c    = last_[i];
     bool     init = !c.valid;
     bool     att  = init || c.attached != live_att;
@@ -307,7 +310,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     }
 
     ChargeProgress prog = live_att
-        ? charge_progress(p.session.peak_i_mA, live_i_mA, p.phase)
+        ? charge_progress(sess.peak_i_mA, live_i_mA, phase)
         : ChargeProgress{0, false};
     EtaSeconds     eta = compute_eta(p);
     bool prog_changed = c.progress_pct != prog.pct ||
@@ -317,12 +320,12 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
         (eta.seconds < 60u) ? 0u : (eta.seconds / 60u);
     bool eta_changed = c.eta_s != eta_minute_bucket ||
                        c.eta_valid != eta.valid ||
-                       c.phase != (uint8_t)p.phase;
+                       c.phase != (uint8_t)phase;
     if (att || prog_changed) {
       draw_progress_bar(i, prog.pct, prog.valid, live_att);
     }
     if (att || eta_changed) {
-      draw_eta_row(i, p.phase, eta, live_att);
+      draw_eta_row(i, phase, eta, live_att);
     }
     if (att || c.energy_cWh != ce) {
       draw_energy_row(i, ce, live_att);
@@ -335,7 +338,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     c.energy_cWh     = ce;
     c.eta_s          = eta_minute_bucket;
     c.proto          = (uint8_t)p.live.proto;
-    c.phase          = (uint8_t)p.phase;
+    c.phase          = (uint8_t)phase;
     c.progress_pct   = prog.pct;
     c.progress_valid = prog.valid;
     c.eta_valid      = eta.valid;

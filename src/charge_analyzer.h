@@ -11,7 +11,10 @@
 
 enum class Phase : uint8_t { Idle, CC, CV, NearDone, Done };
 
-Phase analyze(const PortHistory& h, const PortReading& now);
+// Classify the phase of one rail. The history is per-port (Vbus and
+// timestamps are shared across both rails), but the current trace
+// is taken from the rail selected by `rail`.
+Phase analyze(const PortHistory& h, Rail rail, const PortReading& now);
 
 // peak_i_mA below this threshold counts as "not yet established" — the
 // handshake at 5V/0.3A would otherwise pin peak to a value that makes

@@ -43,18 +43,6 @@ uint16_t PortHistory::avg_i_mA(size_t seconds, Rail rail) const {
   return static_cast<uint16_t>(sum / n);
 }
 
-uint16_t PortHistory::avg_total_i_mA(size_t seconds) const {
-  if (size_ == 0) return 0;
-  size_t   n   = seconds < size_ ? seconds : size_;
-  uint32_t sum = 0;
-  auto     cur = newest_cursor(buf_, head_, kCapacity);
-  for (size_t i = 0; i < n; ++i) {
-    sum += buf_[cur.idx].total_i_mA();
-    cur.advance(kCapacity);
-  }
-  return static_cast<uint16_t>(sum / n);
-}
-
 void PortHistory::power_range_mW(size_t seconds, uint32_t& lo,
                                  uint32_t& hi) const {
   if (size_ == 0) {

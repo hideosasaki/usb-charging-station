@@ -46,6 +46,12 @@ struct PortReading {
   uint16_t i_mA(Rail rail) const {
     return rail == Rail::UsbC ? i_c_mA : i_a_mA;
   }
+  // Pick a representative rail for single-rail UI / ETA paths. USB-C wins
+  // when both are attached; falls back to USB-A when only A is, and to
+  // USB-C when nothing is plugged in (so callers get a stable default).
+  Rail active_rail() const {
+    return has_c() ? Rail::UsbC : (has_a() ? Rail::UsbA : Rail::UsbC);
+  }
   // Vbus is shared, so port power equals V * (Ic + Ia) regardless of
   // which connector is delivering current.
   uint16_t total_i_mA() const {

@@ -58,10 +58,6 @@ class PortHistory {
   // samples. Returns 0 when empty.
   uint16_t avg_i_mA(size_t seconds, Rail rail) const;
 
-  // Mean of (i_c + i_a) over the same window. Useful while the analyzer
-  // and session layers still treat each port as a single current source.
-  uint16_t avg_total_i_mA(size_t seconds) const;
-
   // Min/max instantaneous power (mW) over the last min(seconds, size())
   // samples. Power is computed against the per-sample rail sum.
   void power_range_mW(size_t seconds, uint32_t& lo, uint32_t& hi) const;

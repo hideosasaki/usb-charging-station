@@ -17,7 +17,12 @@ struct SessionStats {
 };
 
 void session_reset(SessionStats& s);
-void session_update(SessionStats& s, const PortReading& r, uint32_t dt_ms);
+
+// Update a single-rail session. Plug/unplug edges fire from the per-rail
+// attach state, so a USB-A side session keeps running across a USB-C
+// device swap and vice versa.
+void session_update(SessionStats& s, const PortReading& r, Rail rail,
+                    uint32_t dt_ms);
 
 inline uint32_t session_elapsed_s(const SessionStats& s, uint32_t now_ms) {
   if (!s.active) return 0;

@@ -38,21 +38,21 @@ void fill(PortHistory& h, const PortReading& r, size_t n) {
 void test_idle_when_detached(void) {
   PortHistory h;
   PortReading now = mk(0, 0, false);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Idle, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Idle, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_idle_when_current_negligible(void) {
   PortHistory h;
   PortReading now = mk(5000, 20, true);
   fill(h, now, 10);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Idle, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Idle, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_cc_high_v_high_stable_i(void) {
   PortHistory h;
   PortReading now = mk(9000, 2050);
   fill(h, now, 60);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CC, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CC, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_cv_high_v_falling_i(void) {
@@ -61,7 +61,7 @@ void test_cv_high_v_falling_i(void) {
   for (int i = 0; i < 30; ++i) h.push(to_sample(mk(9000, 2000)));
   for (int i = 0; i < 30; ++i) h.push(to_sample(mk(9000, 1000)));
   PortReading now = mk(9000, 1000);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CV, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::CV, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_neardone_low_v_short_history(void) {
@@ -69,14 +69,14 @@ void test_neardone_low_v_short_history(void) {
   PortHistory h;
   PortReading now = mk(5000, 450);
   fill(h, now, 5);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::NearDone, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::NearDone, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_done_after_neardone_persists(void) {
   PortHistory h;
   PortReading now = mk(5000, 250);
   fill(h, now, 60);
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Done, (uint8_t)analyze(h, now));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)Phase::Done, (uint8_t)analyze(h, Rail::UsbC, now));
 }
 
 void test_progress_invalid_when_peak_below_threshold(void) {

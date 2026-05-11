@@ -11,11 +11,10 @@ void session_reset(SessionStats& s) {
   s.last_attached = false;
 }
 
-void session_update(SessionStats& s, const PortReading& r, uint32_t dt_ms) {
-  // Vbus is shared across both rails of the port, so the energy meter
-  // tracks V * (Ic + Ia) regardless of which connector is in use.
-  uint16_t i_mA     = r.total_i_mA();
-  bool     attached = r.attached();
+void session_update(SessionStats& s, const PortReading& r, Rail rail,
+                    uint32_t dt_ms) {
+  uint16_t i_mA     = r.i_mA(rail);
+  bool     attached = r.has(rail);
 
   bool rising = attached && !s.last_attached;
   if (rising) {
