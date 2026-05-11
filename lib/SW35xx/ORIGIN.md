@@ -4,7 +4,7 @@ Upstream:    https://github.com/dimitar-grigorov/SW35xx_lib
 Backup fork: https://github.com/hideosasaki/SW35xx_lib
 Commit:      6253d660f454a936449163307cbe7d5369038278
 Fetched:     2026-05-11
-License:     MIT (see LICENSE)
+License:     GPL-3.0 (see LICENSE)
 
 ## Why vendored
 
@@ -21,7 +21,7 @@ fork is kept at the URL above as insurance against upstream deletion.
 - `src/I2CInterface.h`  — pure-virtual I²C base class
 - `src/SW35xx_lib.h`    — SW35xx driver declarations (namespace SW35xx_lib)
 - `src/SW35xx_lib.cpp`  — driver implementation
-- `LICENSE`             — MIT license text
+- `LICENSE`             — GPL-3.0 license text
 - `library.properties`  — PlatformIO / Arduino IDE metadata
 
 ## Files intentionally omitted
