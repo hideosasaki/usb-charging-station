@@ -24,14 +24,34 @@ enum class PortError : uint8_t {
   Stale,
 };
 
+// A SW3518 port has two physical rails: USB-C and USB-A. Vbus and the
+// negotiated protocol are shared (the chip routes one voltage rail to
+// either or both connectors). Currents are per-rail.
+enum class Rail : uint8_t { UsbC = 0, UsbA = 1 };
+constexpr uint8_t kRailMaskC = 0x1;
+constexpr uint8_t kRailMaskA = 0x2;
+
 struct PortReading {
   uint32_t  t_ms;
-  uint16_t  v_mV;
-  uint16_t  i_mA;
-  Protocol  proto;
+  uint16_t  v_mV;       // shared Vbus across both rails
+  uint16_t  i_c_mA;     // USB-C rail current
+  uint16_t  i_a_mA;     // USB-A rail current
+  Protocol  proto;      // applies to the USB-C rail; USB-A is implicit Std5V
   PortError err;
-  bool      attached;
+  uint8_t   rail_mask;  // bit0=C attached, bit1=A attached
+  bool      attached;   // equivalent to rail_mask != 0
 };
+
+inline uint16_t reading_i_mA(const PortReading& r, Rail rail) {
+  return rail == Rail::UsbC ? r.i_c_mA : r.i_a_mA;
+}
+
+// Sum of both rails. Vbus is shared, so the total power drawn from the
+// port is V * (Ic + Ia) regardless of which connector is delivering it.
+inline uint16_t reading_total_i_mA(const PortReading& r) {
+  return static_cast<uint16_t>(
+      static_cast<uint32_t>(r.i_c_mA) + static_cast<uint32_t>(r.i_a_mA));
+}
 
 class PortReader {
  public:

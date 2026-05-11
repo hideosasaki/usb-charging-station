@@ -121,9 +121,10 @@ CmdResult cmd_status(MockPortReader* readers[3], char* out, size_t out_n) {
     // or re-evaluate the scenario from t=0.
     PortReading r = readers[i]->last_reading();
     int written = snprintf(out + off, out_n - off,
-                           "P%u %s %umV %umA %s\n",
+                           "P%u %s %umV C%umA A%umA %s\n",
                            (unsigned)i, r.attached ? "on" : "off",
-                           (unsigned)r.v_mV, (unsigned)r.i_mA,
+                           (unsigned)r.v_mV,
+                           (unsigned)r.i_c_mA, (unsigned)r.i_a_mA,
                            protocol_name(r.proto));
     if (written < 0 || (size_t)written >= out_n - off) break;
     off += (size_t)written;

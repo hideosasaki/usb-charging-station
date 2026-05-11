@@ -10,10 +10,13 @@ namespace {
 HistorySample mk(uint16_t v_mV, uint16_t i_mA, uint8_t proto = 0,
                  bool attached = true) {
   HistorySample s{};
-  s.v_mV = v_mV;
-  s.i_mA = i_mA;
-  s.proto = proto;
-  s.flags = attached ? 0x01 : 0x00;
+  s.v_mV   = v_mV;
+  // Existing tests treat i_mA as the whole port's current; route it
+  // through USB-C so per-rail and total queries see the same number.
+  s.i_c_mA = i_mA;
+  s.i_a_mA = 0;
+  s.proto  = proto;
+  s.flags  = attached ? 0x01 : 0x00;
   s.reserved = 0;
   return s;
 }
@@ -23,7 +26,7 @@ HistorySample mk(uint16_t v_mV, uint16_t i_mA, uint8_t proto = 0,
 void test_empty(void) {
   PortHistory h;
   TEST_ASSERT_EQUAL_UINT32(0u, h.size());
-  TEST_ASSERT_EQUAL_UINT16(0, h.avg_i_mA(10));
+  TEST_ASSERT_EQUAL_UINT16(0, h.avg_i_mA(10, Rail::UsbC));
   uint32_t lo = 12345, hi = 12345;
   h.power_range_mW(10, lo, hi);
   TEST_ASSERT_EQUAL_UINT32(0u, lo);
@@ -35,8 +38,8 @@ void test_single_push(void) {
   h.push(mk(5000, 480));
   TEST_ASSERT_EQUAL_UINT32(1u, h.size());
   TEST_ASSERT_EQUAL_UINT16(5000, h.at(0).v_mV);
-  TEST_ASSERT_EQUAL_UINT16(480, h.at(0).i_mA);
-  TEST_ASSERT_EQUAL_UINT16(480, h.avg_i_mA(10));
+  TEST_ASSERT_EQUAL_UINT16(480, h.at(0).i_c_mA);
+  TEST_ASSERT_EQUAL_UINT16(480, h.avg_i_mA(10, Rail::UsbC));
 }
 
 void test_newest_first_order(void) {
@@ -87,11 +90,11 @@ void test_avg_recent(void) {
   for (uint16_t i = 0; i < 10; ++i) h.push(mk(0, static_cast<uint16_t>(100)));
   for (uint16_t i = 0; i < 5; ++i)  h.push(mk(0, static_cast<uint16_t>(200)));
   // Last 5 samples are 200, last 10 are 200,200,200,200,200,100,100,100,100,100
-  TEST_ASSERT_EQUAL_UINT16(200, h.avg_i_mA(5));
-  TEST_ASSERT_EQUAL_UINT16(150, h.avg_i_mA(10));
+  TEST_ASSERT_EQUAL_UINT16(200, h.avg_i_mA(5, Rail::UsbC));
+  TEST_ASSERT_EQUAL_UINT16(150, h.avg_i_mA(10, Rail::UsbC));
   // Asking for more than available falls back to whatever exists:
   // 5 samples at 200 plus 10 at 100 over all 15 -> (1000+1000)/15 = 133.
-  TEST_ASSERT_EQUAL_UINT16(133, h.avg_i_mA(100));
+  TEST_ASSERT_EQUAL_UINT16(133, h.avg_i_mA(100, Rail::UsbC));
 }
 
 void test_power_range(void) {

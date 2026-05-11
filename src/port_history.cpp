@@ -31,13 +31,25 @@ ReverseCursor newest_cursor(const HistorySample* buf, size_t head,
 
 }  // namespace
 
-uint16_t PortHistory::avg_i_mA(size_t seconds) const {
+uint16_t PortHistory::avg_i_mA(size_t seconds, Rail rail) const {
   if (size_ == 0) return 0;
   size_t   n   = seconds < size_ ? seconds : size_;
   uint32_t sum = 0;
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
-    sum += buf_[cur.idx].i_mA;
+    sum += sample_i_mA(buf_[cur.idx], rail);
+    cur.advance(kCapacity);
+  }
+  return static_cast<uint16_t>(sum / n);
+}
+
+uint16_t PortHistory::avg_total_i_mA(size_t seconds) const {
+  if (size_ == 0) return 0;
+  size_t   n   = seconds < size_ ? seconds : size_;
+  uint32_t sum = 0;
+  auto     cur = newest_cursor(buf_, head_, kCapacity);
+  for (size_t i = 0; i < n; ++i) {
+    sum += sample_total_i_mA(buf_[cur.idx]);
     cur.advance(kCapacity);
   }
   return static_cast<uint16_t>(sum / n);
@@ -58,8 +70,7 @@ void PortHistory::power_range_mW(size_t seconds, uint32_t& lo,
   auto     cur = newest_cursor(buf_, head_, kCapacity);
   for (size_t i = 0; i < n; ++i) {
     const auto& s  = buf_[cur.idx];
-    uint32_t    vi = static_cast<uint32_t>(s.v_mV) *
-                     static_cast<uint32_t>(s.i_mA);
+    uint32_t    vi = static_cast<uint32_t>(s.v_mV) * sample_total_i_mA(s);
     if (vi < mn) mn = vi;
     if (vi > mx) mx = vi;
     cur.advance(kCapacity);
@@ -90,8 +101,7 @@ void PortHistory::power_downsample_mW(uint32_t* out, size_t count,
     size_t   n      = 0;
     for (size_t k = 0; k < width && covered > 0; ++k) {
       const auto& s = buf_[cur.idx];
-      sum_vi += static_cast<uint32_t>(s.v_mV) *
-                static_cast<uint32_t>(s.i_mA);
+      sum_vi += static_cast<uint32_t>(s.v_mV) * sample_total_i_mA(s);
       cur.advance(kCapacity);
       --covered;
       ++n;

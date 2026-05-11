@@ -26,7 +26,7 @@ void test_scenario_a_detached_before_2s(void) {
   PortReading s = r.read(0);
   TEST_ASSERT_FALSE(s.attached);
   TEST_ASSERT_EQUAL_UINT16(0, s.v_mV);
-  TEST_ASSERT_EQUAL_UINT16(0, s.i_mA);
+  TEST_ASSERT_EQUAL_UINT16(0, s.i_c_mA);
 }
 
 void test_scenario_a_handshake_at_3s(void) {
@@ -35,7 +35,7 @@ void test_scenario_a_handshake_at_3s(void) {
   PortReading s = r.read(3000);
   TEST_ASSERT_TRUE(s.attached);
   approx_eq(5000, s.v_mV, 50, "v@3s");
-  approx_eq(300, s.i_mA, 10, "i@3s");
+  approx_eq(300, s.i_c_mA, 10, "i@3s");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Std5V, (uint8_t)s.proto);
 }
 
@@ -45,7 +45,7 @@ void test_scenario_a_cc_at_10s(void) {
   PortReading s = r.read(10'000);
   TEST_ASSERT_TRUE(s.attached);
   approx_eq(9000, s.v_mV, 50, "v@10s");
-  approx_eq(2050, s.i_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@10s");
+  approx_eq(2050, s.i_c_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@10s");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Pd30, (uint8_t)s.proto);
 }
 
@@ -57,7 +57,7 @@ void test_scenario_a_cv_at_400s(void) {
   approx_eq(9000, s.v_mV, 50, "v@400s");
   // CV taper is linear 2050 mA -> 300 mA across 305..605s, so t=400s lands
   // at ~1496 mA before +/-2% jitter.
-  approx_eq(1496, s.i_mA, 35, "i@400s");
+  approx_eq(1496, s.i_c_mA, 35, "i@400s");
 }
 
 void test_scenario_a_neardone_at_700s(void) {
@@ -66,7 +66,7 @@ void test_scenario_a_neardone_at_700s(void) {
   PortReading s = r.read(700'000);
   TEST_ASSERT_TRUE(s.attached);
   approx_eq(5000, s.v_mV, 50, "v@700s");
-  approx_eq(300, s.i_mA, 15, "i@700s");
+  approx_eq(300, s.i_c_mA, 15, "i@700s");
 }
 
 void test_scenario_a_detach_at_725s(void) {
@@ -82,7 +82,7 @@ void test_scenario_a_loops_after_740s(void) {
   PortReading s = r.read(750'000);
   TEST_ASSERT_TRUE(s.attached);
   approx_eq(9000, s.v_mV, 50, "v@loop");
-  approx_eq(2050, s.i_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@loop");
+  approx_eq(2050, s.i_c_mA, (uint16_t)(2050 * 2 / 100 + 1), "i@loop");
 }
 
 void test_scenario_b_steady(void) {
@@ -91,7 +91,7 @@ void test_scenario_b_steady(void) {
   PortReading s = r.read(50'000);
   TEST_ASSERT_TRUE(s.attached);
   approx_eq(5000, s.v_mV, 50, "vB");
-  approx_eq(480, s.i_mA, 15, "iB");
+  approx_eq(480, s.i_c_mA, 15, "iB");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Std5V, (uint8_t)s.proto);
 }
 
@@ -110,7 +110,7 @@ void test_scenario_c_idle_and_burst(void) {
   PortReading burst = r.read(150'000);
   TEST_ASSERT_TRUE(burst.attached);
   approx_eq(12000, burst.v_mV, 80, "vC burst");
-  approx_eq(1500, burst.i_mA, (uint16_t)(1500 * 2 / 100 + 1), "iC burst");
+  approx_eq(1500, burst.i_c_mA, (uint16_t)(1500 * 2 / 100 + 1), "iC burst");
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Qc30, (uint8_t)burst.proto);
 }
 
@@ -121,7 +121,7 @@ void test_override_pins_value(void) {
   PortReading s = r.read(0);  // would normally be detached
   TEST_ASSERT_TRUE(s.attached);
   TEST_ASSERT_EQUAL_UINT16(9000, s.v_mV);
-  TEST_ASSERT_EQUAL_UINT16(2050, s.i_mA);
+  TEST_ASSERT_EQUAL_UINT16(2050, s.i_c_mA);
   r.clear_override();
   PortReading s2 = r.read(0);
   TEST_ASSERT_FALSE(s2.attached);
@@ -155,8 +155,8 @@ void test_jitter_within_two_percent(void) {
   uint16_t lo = 0xFFFFu, hi = 0;
   for (uint32_t t = 10'000; t < 300'000; t += 1000) {
     PortReading s = r.read(t);
-    if (s.i_mA < lo) lo = s.i_mA;
-    if (s.i_mA > hi) hi = s.i_mA;
+    if (s.i_c_mA < lo) lo = s.i_c_mA;
+    if (s.i_c_mA > hi) hi = s.i_c_mA;
   }
   TEST_ASSERT_TRUE(lo >= (uint16_t)(2050 * 98 / 100 - 1));
   TEST_ASSERT_TRUE(hi <= (uint16_t)(2050 * 102 / 100 + 1));

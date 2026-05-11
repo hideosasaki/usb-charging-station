@@ -257,14 +257,14 @@ void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
 // (PortHistory::avg_i_mA would otherwise average over what it has).
 uint16_t avg_i_full_window(const PortHistory* h, size_t seconds) {
   if (!h || h->size() < seconds) return 0;
-  return h->avg_i_mA(seconds);
+  return h->avg_total_i_mA(seconds);
 }
 
 EtaSeconds compute_eta(const PortSnapshot& p) {
   if (!p.live.attached) return {0, false};
   uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s);
   uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s);
-  return eta_seconds(p.live.i_mA, recent, old, p.phase);
+  return eta_seconds(reading_total_i_mA(p.live), recent, old, p.phase);
 }
 
 }  // namespace
@@ -279,10 +279,11 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
                        uint32_t now_ms) {
   for (uint8_t i = 0; i < 3; ++i) {
     const PortSnapshot& p    = ports[i];
-    uint32_t w_mW = power_mW(p.live.v_mV, p.live.i_mA);
+    uint16_t live_i_mA = reading_total_i_mA(p.live);
+    uint32_t w_mW = power_mW(p.live.v_mV, live_i_mA);
     uint32_t cw   = centi(w_mW);
     uint32_t cv   = centi(p.live.v_mV);
-    uint32_t ci   = centi(p.live.i_mA);
+    uint32_t ci   = centi(live_i_mA);
     uint32_t es   = session_elapsed_s(p.session, now_ms);
     uint32_t ce   = centi(p.session.energy_mWh);
     Cache&   c    = last_[i];
@@ -297,7 +298,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     }
     if (att || c.v_mV != cv || c.i_mA != ci) {
       char buf[24];
-      format_va(buf, sizeof(buf), p.live.v_mV, p.live.i_mA, p.live.attached);
+      format_va(buf, sizeof(buf), p.live.v_mV, live_i_mA, p.live.attached);
       draw_text(i, kVAY, kRowH, kSubColor, buf, 2);
     }
     if (att || c.elapsed_s != es) {
@@ -305,7 +306,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     }
 
     ChargeProgress prog = p.live.attached
-        ? charge_progress(p.session.peak_i_mA, p.live.i_mA, p.phase)
+        ? charge_progress(p.session.peak_i_mA, live_i_mA, p.phase)
         : ChargeProgress{0, false};
     EtaSeconds     eta = compute_eta(p);
     bool prog_changed = c.progress_pct != prog.pct ||

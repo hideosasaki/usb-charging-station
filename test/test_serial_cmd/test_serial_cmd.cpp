@@ -65,7 +65,7 @@ void test_port_override_fixed_value(void) {
   PortReading r = r0.read(0);  // even when scenario says detached
   TEST_ASSERT_TRUE(r.attached);
   TEST_ASSERT_EQUAL_UINT16(9000, r.v_mV);
-  TEST_ASSERT_EQUAL_UINT16(2050, r.i_mA);
+  TEST_ASSERT_EQUAL_UINT16(2050, r.i_c_mA);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)Protocol::Pd30, (uint8_t)r.proto);
 }
 

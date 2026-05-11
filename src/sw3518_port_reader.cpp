@@ -67,23 +67,34 @@ PortReading Sw3518PortReader::read(uint32_t now_ms) {
   chip_.readStatus();
   SW35xx::FastChargeInfo fc = chip_.getFastChargeInfo();
 
-  uint16_t v_mV = chip_.vout_mV;
-  uint16_t i_mA = chip_.iout_usbc_mA;
+  uint16_t v_mV   = chip_.vout_mV;
+  uint16_t i_c_mA = chip_.iout_usbc_mA;
+  uint16_t i_a_mA = chip_.iout_usba_mA;
 
-  bool attached = (v_mV >= kAttachedVThreshold_mV) ||
-                  (i_mA >= kAttachedIThreshold_mA);
+  uint8_t mask = 0;
+  // Vbus is shared, so a healthy 5V+ rail with no measurable current is
+  // ambiguous between the two connectors. Bias toward USB-C, which is the
+  // negotiable side; the A flag fires only when actual current is seen.
+  if (v_mV >= kAttachedVThreshold_mV || i_c_mA >= kAttachedIThreshold_mA) {
+    mask |= kRailMaskC;
+  }
+  if (i_a_mA >= kAttachedIThreshold_mA) {
+    mask |= kRailMaskA;
+  }
 
-  r.v_mV     = v_mV;
-  r.i_mA     = i_mA;
-  r.proto    = map_protocol(fc, attached, v_mV);
-  r.attached = attached;
+  r.v_mV      = v_mV;
+  r.i_c_mA    = i_c_mA;
+  r.i_a_mA    = i_a_mA;
+  r.rail_mask = mask;
+  r.attached  = (mask != 0);
+  r.proto     = map_protocol(fc, (mask & kRailMaskC) != 0, v_mV);
 
   // The vendored driver returns 0 on I2C read error, so a dead bus
   // looks identical to an idle port. Best we can do: assume the bus
   // is healthy as long as we see *some* non-zero report within the
   // window, and surface Stale otherwise.
-  bool any_activity = (v_mV != 0) || (i_mA != 0) || fc.ledOn ||
-                      fc.protocol != SW35xx::NOT_FAST_CHARGE;
+  bool any_activity = (v_mV != 0) || (i_c_mA != 0) || (i_a_mA != 0) ||
+                      fc.ledOn || fc.protocol != SW35xx::NOT_FAST_CHARGE;
   if (any_activity) {
     last_ok_ms_ = now_ms;
   } else if ((now_ms - last_ok_ms_) > 5000) {

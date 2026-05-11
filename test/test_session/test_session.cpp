@@ -10,10 +10,12 @@ namespace {
 
 PortReading mk(uint16_t v_mV, uint16_t i_mA, bool attached, uint32_t t_ms) {
   PortReading r{};
-  r.t_ms = t_ms;
-  r.v_mV = v_mV;
-  r.i_mA = i_mA;
-  r.attached = attached;
+  r.t_ms      = t_ms;
+  r.v_mV      = v_mV;
+  r.i_c_mA    = i_mA;
+  r.i_a_mA    = 0;
+  r.attached  = attached;
+  r.rail_mask = attached ? kRailMaskC : 0;
   return r;
 }
 

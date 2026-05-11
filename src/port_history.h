@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "port_reader.h"  // Rail
+
 // flags bits — keep one definition so producers (PortReader bridge) and
 // consumers (View) cannot drift apart on the bit layout.
 static constexpr uint8_t kFlagAttached = 0x01;
@@ -16,15 +18,29 @@ inline uint32_t power_mW(uint16_t v_mV, uint16_t i_mA) {
   return (static_cast<uint32_t>(v_mV) * static_cast<uint32_t>(i_mA)) / 1000u;
 }
 
+// 12 bytes: Vbus shared, two rail currents preserved verbatim so the
+// USB-C and USB-A sides can be analyzed independently. RAM budget:
+// 3 ports * 3600 samples * 12 B = 130 KB, well within the 264 KB SRAM.
+// The reserved word leaves headroom for future per-sample telemetry
+// (e.g. chip temperature) without bumping the budget again.
 struct HistorySample {
   uint16_t v_mV;
-  uint16_t i_mA;
+  uint16_t i_c_mA;     // USB-C rail current
+  uint16_t i_a_mA;     // USB-A rail current
   uint8_t  proto;
-  uint8_t  flags;
-  uint16_t reserved;
+  uint8_t  flags;      // see kFlag*; rail-mask bits live in bits 2..3
+  uint32_t reserved;
 };
-static_assert(sizeof(HistorySample) == 8,
-              "HistorySample must remain 8 bytes for the SRAM budget");
+static_assert(sizeof(HistorySample) == 12,
+              "HistorySample size assumption changed; revisit SRAM budget");
+
+inline uint16_t sample_i_mA(const HistorySample& s, Rail rail) {
+  return rail == Rail::UsbC ? s.i_c_mA : s.i_a_mA;
+}
+
+inline uint32_t sample_total_i_mA(const HistorySample& s) {
+  return static_cast<uint32_t>(s.i_c_mA) + static_cast<uint32_t>(s.i_a_mA);
+}
 
 class PortHistory {
  public:
@@ -39,12 +55,16 @@ class PortHistory {
   // Behavior is undefined when i >= size().
   const HistorySample& at(size_t i) const;
 
-  // Mean current over the last min(seconds, size()) samples. Returns 0 when
-  // empty.
-  uint16_t avg_i_mA(size_t seconds) const;
+  // Mean current of the given rail over the last min(seconds, size())
+  // samples. Returns 0 when empty.
+  uint16_t avg_i_mA(size_t seconds, Rail rail) const;
+
+  // Mean of (i_c + i_a) over the same window. Useful while the analyzer
+  // and session layers still treat each port as a single current source.
+  uint16_t avg_total_i_mA(size_t seconds) const;
 
   // Min/max instantaneous power (mW) over the last min(seconds, size())
-  // samples. Returns lo=hi=0 when empty.
+  // samples. Power is computed against the per-sample rail sum.
   void power_range_mW(size_t seconds, uint32_t& lo, uint32_t& hi) const;
 
   // Compress the last `total_seconds` of power into `count` bins of

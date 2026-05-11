@@ -10,20 +10,23 @@ namespace {
 
 PortReading mk(uint16_t v_mV, uint16_t i_mA, bool attached = true) {
   PortReading r{};
-  r.v_mV = v_mV;
-  r.i_mA = i_mA;
-  r.proto = Protocol::Pd30;
-  r.err = PortError::Ok;
-  r.attached = attached;
+  r.v_mV      = v_mV;
+  r.i_c_mA    = i_mA;
+  r.i_a_mA    = 0;
+  r.proto     = Protocol::Pd30;
+  r.err       = PortError::Ok;
+  r.attached  = attached;
+  r.rail_mask = attached ? kRailMaskC : 0;
   return r;
 }
 
 HistorySample to_sample(const PortReading& r) {
   HistorySample s{};
-  s.v_mV = r.v_mV;
-  s.i_mA = r.i_mA;
-  s.proto = (uint8_t)r.proto;
-  s.flags = r.attached ? kFlagAttached : 0;
+  s.v_mV   = r.v_mV;
+  s.i_c_mA = r.i_c_mA;
+  s.i_a_mA = r.i_a_mA;
+  s.proto  = (uint8_t)r.proto;
+  s.flags  = r.attached ? kFlagAttached : 0;
   return s;
 }
 

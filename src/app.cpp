@@ -39,13 +39,25 @@ DisplayUi    ui;
 uint32_t last_sample_ms  = 0;
 uint8_t  heartbeat_phase = 0;
 
+const char* err_name(PortError e) {
+  switch (e) {
+    case PortError::Ok:         return "OK";
+    case PortError::NotPresent: return "NoDev";
+    case PortError::I2cTimeout: return "Timeout";
+    case PortError::I2cNack:    return "Nack";
+    case PortError::Stale:      return "Stale";
+  }
+  return "?";
+}
+
 HistorySample to_sample(const PortReading& r) {
   HistorySample s{};
-  s.v_mV  = r.v_mV;
-  s.i_mA  = r.i_mA;
-  s.proto = (uint8_t)r.proto;
-  s.flags = (r.attached ? kFlagAttached : 0) |
-            (r.err != PortError::Ok ? kFlagError : 0);
+  s.v_mV   = r.v_mV;
+  s.i_c_mA = r.i_c_mA;
+  s.i_a_mA = r.i_a_mA;
+  s.proto  = (uint8_t)r.proto;
+  s.flags  = (r.attached ? kFlagAttached : 0) |
+             (r.err != PortError::Ok ? kFlagError : 0);
   return s;
 }
 
@@ -103,7 +115,17 @@ void app_loop() {
     snap[i].session = session[i];
     snap[i].history = &history[i];
 
-    if (r.attached) total_mW += power_mW(r.v_mV, r.i_mA);
+    if (r.attached) total_mW += power_mW(r.v_mV, reading_total_i_mA(r));
+
+    // Skip the trace when nothing is plugged in or when no host is
+    // reading from CDC, both to keep the log signal high and to avoid
+    // blocking on a full USB TX buffer with no consumer.
+    if (Serial && (r.attached || r.err != PortError::Ok)) {
+      Serial.printf("[t=%lus] port%u: mask=0x%x V=%umV Ic=%umA Ia=%umA proto=%s err=%s\n",
+                    (unsigned long)(now / 1000), i,
+                    r.rail_mask, r.v_mV, r.i_c_mA, r.i_a_mA,
+                    protocol_name(r.proto), err_name(r.err));
+    }
   }
   ui.render(snap, total_mW, now);
 
