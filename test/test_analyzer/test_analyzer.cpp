@@ -106,6 +106,35 @@ void test_progress_clamps_at_100_when_done(void) {
   TEST_ASSERT_EQUAL_UINT8(100, p.pct);
 }
 
+void test_eta_invalid_in_cc(void) {
+  // CC: averages are flat at ~2000 mA -> no taper, no ETA.
+  EtaSeconds e = eta_seconds(2000, 2000, 2000, Phase::CC);
+  TEST_ASSERT_FALSE(e.valid);
+}
+
+void test_eta_invalid_when_idle(void) {
+  EtaSeconds e = eta_seconds(0, 0, 0, Phase::Idle);
+  TEST_ASSERT_FALSE(e.valid);
+}
+
+void test_eta_invalid_when_done(void) {
+  EtaSeconds e = eta_seconds(200, 200, 250, Phase::Done);
+  TEST_ASSERT_FALSE(e.valid);
+}
+
+void test_eta_in_cv(void) {
+  // 25s ago: 1500 mA; recently: 1000 mA; drop = 500 mA over 25s = 20 mA/s.
+  // now_i = 1000 -> remaining ~50s.
+  EtaSeconds e = eta_seconds(1000, 1000, 1500, Phase::CV);
+  TEST_ASSERT_TRUE(e.valid);
+  TEST_ASSERT_TRUE(e.seconds >= 45 && e.seconds <= 55);
+}
+
+void test_eta_invalid_when_rising(void) {
+  EtaSeconds e = eta_seconds(1000, 1100, 900, Phase::CV);
+  TEST_ASSERT_FALSE(e.valid);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -122,5 +151,10 @@ int main(int, char**) {
   RUN_TEST(test_progress_half_in_cv);
   RUN_TEST(test_progress_high_near_done);
   RUN_TEST(test_progress_clamps_at_100_when_done);
+  RUN_TEST(test_eta_invalid_in_cc);
+  RUN_TEST(test_eta_invalid_when_idle);
+  RUN_TEST(test_eta_invalid_when_done);
+  RUN_TEST(test_eta_in_cv);
+  RUN_TEST(test_eta_invalid_when_rising);
   return UNITY_END();
 }

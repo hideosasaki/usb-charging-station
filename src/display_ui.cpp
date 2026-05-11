@@ -14,29 +14,35 @@ namespace {
 constexpr int16_t  kScreenW    = 320;
 constexpr int16_t  kScreenH    = 240;
 constexpr int16_t  kColW       = 106;
-constexpr int16_t  kColSlack   = kScreenW - 3 * kColW;  // absorbed by col 2
+constexpr int16_t  kColSlack   = kScreenW - 3 * kColW;
 constexpr int16_t  kColPadL    = 4;
 constexpr int16_t  kColPadR    = 2;
 constexpr int16_t  kBodyBottom = 220;
-constexpr int16_t  kSummaryPadR = 6;
+constexpr int16_t  kSummaryPadR   = 6;
 constexpr int16_t  kSummaryClearW = 140;
-constexpr uint16_t kFrameColor  = 0x4208;  // dark grey
-constexpr uint16_t kValueColor  = TFT_WHITE;
-constexpr uint16_t kProtoColor  = TFT_CYAN;
-constexpr uint16_t kSubColor    = 0xC618;  // light grey for V/A
-constexpr uint16_t kBgColor     = TFT_BLACK;
+// Material Dark on a black background. Greys/accents only — the surface
+// stays full black so the OLED-style contrast carries through.
+constexpr uint16_t kFrameColor = 0x39E7;  // outline #3A3A3A
+constexpr uint16_t kValueColor = 0xDF1C;  // on-surface #E0E0E0
+constexpr uint16_t kSubColor   = 0xA514;  // on-surface-variant #A0A0A0
+constexpr uint16_t kAccentOk   = 0x07EE;  // green A400 #00E676
+constexpr uint16_t kBgColor    = TFT_BLACK;
 
 constexpr int16_t kHeaderY    = 4;
-constexpr int16_t kPowerY     = 32;
-constexpr int16_t kVAY        = 76;
-constexpr int16_t kProtoY     = 108;
-constexpr int16_t kPhaseY     = 140;
-constexpr int16_t kProgressY  = 168;
+constexpr int16_t kPillY      = 30;
+constexpr int16_t kPillH      = 18;
+constexpr int16_t kPowerY     = 64;
+constexpr int16_t kPowerH     = 26;
+constexpr int16_t kVAY        = 96;
+constexpr int16_t kClockY     = 118;
+constexpr int16_t kClockRowH  = 16;
+constexpr int16_t kClockR     = 6;
+constexpr int16_t kProgressY  = 146;
 constexpr int16_t kProgressH  = 10;
-constexpr int16_t kEnergyY    = 184;
-constexpr int16_t kBigFontH   = 26;
+constexpr int16_t kEtaY       = 166;
+constexpr int16_t kEnergyY    = 188;
 constexpr int16_t kRowH       = 16;
-constexpr uint16_t kProgressFill   = TFT_GREEN;
+constexpr uint16_t kProgressFill   = kAccentOk;
 constexpr uint16_t kProgressBorder = kFrameColor;
 
 int16_t col_left(uint8_t i) { return i * kColW + kColPadL; }
@@ -46,17 +52,17 @@ int16_t col_right(uint8_t i) {
 }
 int16_t col_width(uint8_t i) { return col_right(i) - col_left(i); }
 
-// Keep this switch in lock-step with phase_name() in charge_analyzer.h —
-// adding a Phase value requires touching both.
-uint16_t phase_color(Phase p) {
+uint16_t proto_color(Protocol p) {
   switch (p) {
-    case Phase::CC:       return TFT_YELLOW;
-    case Phase::CV:       return TFT_GREEN;
-    case Phase::NearDone: return TFT_SKYBLUE;
-    case Phase::Done:     return TFT_DARKGREY;
-    case Phase::Idle:     return TFT_DARKGREY;
+    case Protocol::Std5V:   return 0x4DB4;  // teal 300 #4DB6AC
+    case Protocol::Qc20:    return 0xB30D;  // purple 300 #BA68C8
+    case Protocol::Qc30:    return 0x9ABA;  // deep purple 300 #9575CD
+    case Protocol::Pd20:    return 0x4E1F;  // light blue 300 #4FC3F7
+    case Protocol::Pd30:    return 0x65BC;  // blue 300 #64B5F6
+    case Protocol::Pd31Pps: return 0x1FFF;  // cyan A200 #18FFFF
+    case Protocol::None:    return kBgColor;
   }
-  return TFT_DARKGREY;
+  return kBgColor;
 }
 
 void draw_frame() {
@@ -66,8 +72,8 @@ void draw_frame() {
   t.drawFastVLine(2 * kColW, 0, kBodyBottom, kFrameColor);
   for (uint8_t i = 0; i < 3; ++i) {
     char hdr[8];
-    snprintf(hdr, sizeof(hdr), "Port%u", (unsigned)i);
-    t.setTextColor(TFT_WHITE, kBgColor);
+    snprintf(hdr, sizeof(hdr), "Port %u", (unsigned)i);
+    t.setTextColor(kValueColor, kBgColor);
     t.drawString(hdr, col_left(i), kHeaderY, 2);
   }
 }
@@ -82,6 +88,77 @@ void draw_text(uint8_t col, int16_t y, int16_t h, uint16_t fg,
   clear_row(col, y, h);
   t.setTextColor(fg, kBgColor);
   t.drawString(text, col_left(col), y, font);
+}
+
+void draw_pill(uint8_t col, Protocol proto, bool attached) {
+  auto&   t = display_tft();
+  int16_t x = col_left(col);
+  int16_t w = col_width(col);
+  t.fillRect(x, kPillY, w, kPillH, kBgColor);
+  if (!attached || proto == Protocol::None) return;
+  const char* name = protocol_name(proto);
+  int16_t     tw   = t.textWidth(name, 2);
+  int16_t     pw   = tw + 12;
+  if (pw > w) pw = w;
+  uint16_t bg = proto_color(proto);
+  t.fillRoundRect(x, kPillY, pw, kPillH, 4, bg);
+  t.setTextColor(TFT_WHITE, bg);
+  t.drawString(name, x + 6, kPillY + 1, 2);
+}
+
+void draw_clock_icon(int16_t cx, int16_t cy) {
+  auto& t = display_tft();
+  t.drawCircle(cx, cy, kClockR, kSubColor);
+  t.drawLine(cx, cy, cx, cy - (kClockR - 2), kSubColor);
+  t.drawLine(cx, cy, cx + (kClockR - 1), cy, kSubColor);
+}
+
+// Font2 ":" packs the two dots so tightly the time is hard to scan, so
+// the separators are drawn by hand with a wider vertical gap.
+void draw_hms(int16_t x, int16_t y, uint32_t total_s, uint16_t fg) {
+  auto& t = display_tft();
+  t.setTextColor(fg, kBgColor);
+  uint32_t h  = total_s / 3600u;
+  uint32_t m  = (total_s / 60u) % 60u;
+  uint32_t s  = total_s % 60u;
+  char     h_buf[8];
+  snprintf(h_buf, sizeof(h_buf), "%lu", (unsigned long)h);
+  t.drawString(h_buf, x, y, 2);
+  x += t.textWidth(h_buf, 2);
+
+  auto draw_colon = [&](int16_t cx) {
+    t.fillRect(cx, y + 5,  2, 2, fg);
+    t.fillRect(cx, y + 10, 2, 2, fg);
+  };
+
+  draw_colon(x + 2); x += 6;
+  char mm[4];
+  snprintf(mm, sizeof(mm), "%02lu", (unsigned long)m);
+  t.drawString(mm, x, y, 2);
+  x += t.textWidth(mm, 2);
+
+  draw_colon(x + 2); x += 6;
+  char ss[4];
+  snprintf(ss, sizeof(ss), "%02lu", (unsigned long)s);
+  t.drawString(ss, x, y, 2);
+}
+
+// Repaint policy: the clock face is static, so it is only drawn on the
+// attach edge. The H:MM:SS half clears and rewrites every tick.
+void draw_clock_row(uint8_t col, uint32_t elapsed_s, bool attached,
+                    bool force_full_redraw) {
+  int16_t x = col_left(col);
+  if (force_full_redraw) {
+    clear_row(col, kClockY, kClockRowH);
+    if (!attached) return;
+    draw_clock_icon(x + kClockR, kClockY + kClockRowH / 2);
+  } else if (!attached) {
+    return;
+  }
+  int16_t hms_x = x + 2 * kClockR + 4;
+  auto&   t     = display_tft();
+  t.fillRect(hms_x, kClockY, col_right(col) - hms_x, kClockRowH, kBgColor);
+  draw_hms(hms_x, kClockY, elapsed_s, kValueColor);
 }
 
 void format_centi(char* buf, size_t n, uint32_t milli, bool attached,
@@ -101,12 +178,51 @@ void format_va(char* buf, size_t n, uint16_t v_mV, uint16_t i_mA,
   snprintf(buf, n, "%s  %s", v, a);
 }
 
-void format_elapsed(char* buf, size_t n, uint32_t s) {
-  uint32_t h  = s / 3600u;
-  uint32_t m  = (s / 60u) % 60u;
-  uint32_t ss = s % 60u;
-  snprintf(buf, n, "%lu:%02lu:%02lu",
-           (unsigned long)h, (unsigned long)m, (unsigned long)ss);
+void draw_power(uint8_t col, uint32_t w_mW, bool attached) {
+  auto&   t = display_tft();
+  int16_t x = col_left(col);
+  t.fillRect(x, kPowerY, col_width(col), kPowerH, kBgColor);
+  if (!attached) {
+    t.setTextColor(kSubColor, kBgColor);
+    t.drawString("--", x, kPowerY, 4);
+    return;
+  }
+  char buf[16];
+  format_centi(buf, sizeof(buf), w_mW, true, 'W');
+  t.setTextColor(kValueColor, kBgColor);
+  t.drawString(buf, x, kPowerY, 4);
+}
+
+void draw_eta_row(uint8_t col, Phase phase, EtaSeconds eta, bool attached) {
+  if (!attached) { clear_row(col, kEtaY, kRowH); return; }
+  if (phase == Phase::Idle) {
+    draw_text(col, kEtaY, kRowH, kSubColor, "Standby", 2);
+    return;
+  }
+  if (phase == Phase::Done) {
+    draw_text(col, kEtaY, kRowH, kAccentOk, "Done", 2);
+    return;
+  }
+  char        body_buf[16];
+  const char* body;
+  if (!eta.valid) {
+    body = "?";
+  } else if (eta.seconds < 60u) {
+    body = "<1m";
+  } else {
+    uint32_t h = eta.seconds / 3600u;
+    uint32_t m = (eta.seconds / 60u) % 60u;
+    if (h > 0) {
+      snprintf(body_buf, sizeof(body_buf), "%luh %02lum",
+               (unsigned long)h, (unsigned long)m);
+    } else {
+      snprintf(body_buf, sizeof(body_buf), "%lum", (unsigned long)m);
+    }
+    body = body_buf;
+  }
+  char buf[24];
+  snprintf(buf, sizeof(buf), "ETA %s", body);
+  draw_text(col, kEtaY, kRowH, kValueColor, buf, 2);
 }
 
 inline uint32_t centi(uint32_t milli) { return (milli + 5) / 10; }
@@ -125,19 +241,30 @@ void draw_progress_bar(uint8_t col, uint8_t pct, bool valid, bool attached) {
   }
 }
 
-void draw_energy_row(uint8_t col, uint8_t pct, bool valid, uint32_t cwh,
-                     bool attached) {
+void draw_energy_row(uint8_t col, uint32_t cwh, bool attached) {
   clear_row(col, kEnergyY, kRowH);
   if (!attached) return;
-  char pct_str[8];
-  if (valid) snprintf(pct_str, sizeof(pct_str), "%u", (unsigned)pct);
-  else       snprintf(pct_str, sizeof(pct_str), "?");
   char buf[24];
-  snprintf(buf, sizeof(buf), "%s%%  %lu.%02luWh", pct_str,
+  snprintf(buf, sizeof(buf), "%lu.%02luWh",
            (unsigned long)(cwh / 100), (unsigned long)(cwh % 100));
   auto& t = display_tft();
-  t.setTextColor(TFT_WHITE, kBgColor);
+  t.setTextColor(kValueColor, kBgColor);
   t.drawString(buf, col_left(col), kEnergyY, 2);
+}
+
+// ETA needs the full averaging window to make a meaningful slope, so
+// fall back to zero if PortHistory has fewer samples than requested
+// (PortHistory::avg_i_mA would otherwise average over what it has).
+uint16_t avg_i_full_window(const PortHistory* h, size_t seconds) {
+  if (!h || h->size() < seconds) return 0;
+  return h->avg_i_mA(seconds);
+}
+
+EtaSeconds compute_eta(const PortSnapshot& p) {
+  if (!p.live.attached) return {0, false};
+  uint16_t recent = avg_i_full_window(p.history, kEtaRecentWindow_s);
+  uint16_t old    = avg_i_full_window(p.history, kEtaOldWindow_s);
+  return eta_seconds(p.live.i_mA, recent, old, p.phase);
 }
 
 }  // namespace
@@ -152,56 +279,51 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
                        uint32_t now_ms) {
   for (uint8_t i = 0; i < 3; ++i) {
     const PortSnapshot& p    = ports[i];
-    // Pre-quantize to the precision actually drawn so mV/mA-level jitter
-    // does not invalidate the cache when the displayed text is unchanged.
-    uint32_t            cw   = centi(power_mW(p.live.v_mV, p.live.i_mA));
-    uint32_t            cv   = centi(p.live.v_mV);
-    uint32_t            ci   = centi(p.live.i_mA);
-    uint32_t            es   = session_elapsed_s(p.session, now_ms);
-    Cache&              c    = last_[i];
-    bool                init = !c.valid;
-    bool                att  = init || c.attached != p.live.attached;
+    uint32_t w_mW = power_mW(p.live.v_mV, p.live.i_mA);
+    uint32_t cw   = centi(w_mW);
+    uint32_t cv   = centi(p.live.v_mV);
+    uint32_t ci   = centi(p.live.i_mA);
+    uint32_t es   = session_elapsed_s(p.session, now_ms);
+    uint32_t ce   = centi(p.session.energy_mWh);
+    Cache&   c    = last_[i];
+    bool     init = !c.valid;
+    bool     att  = init || c.attached != p.live.attached;
 
+    if (att || c.proto != (uint8_t)p.live.proto) {
+      draw_pill(i, p.live.proto, p.live.attached);
+    }
     if (att || c.w_mW != cw) {
-      char buf[24];
-      format_centi(buf, sizeof(buf),
-                   power_mW(p.live.v_mV, p.live.i_mA),
-                   p.live.attached, 'W');
-      draw_text(i, kPowerY, kBigFontH, kValueColor, buf, 4);
+      draw_power(i, w_mW, p.live.attached);
     }
     if (att || c.v_mV != cv || c.i_mA != ci) {
       char buf[24];
       format_va(buf, sizeof(buf), p.live.v_mV, p.live.i_mA, p.live.attached);
       draw_text(i, kVAY, kRowH, kSubColor, buf, 2);
     }
-    if (att || c.proto != (uint8_t)p.live.proto || c.elapsed_s != es) {
-      char line[24];
-      if (p.live.attached) {
-        char tbuf[16];
-        format_elapsed(tbuf, sizeof(tbuf), es);
-        snprintf(line, sizeof(line), "%s  %s",
-                 protocol_name(p.live.proto), tbuf);
-      } else {
-        snprintf(line, sizeof(line), "--");
-      }
-      draw_text(i, kProtoY, kRowH, kProtoColor, line, 2);
-    }
-    if (init || c.phase != (uint8_t)p.phase) {
-      draw_text(i, kPhaseY, kRowH, phase_color(p.phase),
-                phase_name(p.phase), 2);
+    if (att || c.elapsed_s != es) {
+      draw_clock_row(i, es, p.live.attached, att);
     }
 
     ChargeProgress prog = p.live.attached
         ? charge_progress(p.session.peak_i_mA, p.live.i_mA, p.phase)
         : ChargeProgress{0, false};
-    uint32_t ce           = centi(p.session.energy_mWh);
-    bool     prog_changed = c.progress_pct != prog.pct ||
-                            c.progress_valid != prog.valid;
+    EtaSeconds     eta = compute_eta(p);
+    bool prog_changed = c.progress_pct != prog.pct ||
+                        c.progress_valid != prog.valid;
+    // Quantize to minutes since the row only shows "Xh YYm" / "<1m".
+    uint32_t eta_minute_bucket =
+        (eta.seconds < 60u) ? 0u : (eta.seconds / 60u);
+    bool eta_changed = c.eta_s != eta_minute_bucket ||
+                       c.eta_valid != eta.valid ||
+                       c.phase != (uint8_t)p.phase;
     if (att || prog_changed) {
       draw_progress_bar(i, prog.pct, prog.valid, p.live.attached);
     }
-    if (att || prog_changed || c.energy_cWh != ce) {
-      draw_energy_row(i, prog.pct, prog.valid, ce, p.live.attached);
+    if (att || eta_changed) {
+      draw_eta_row(i, p.phase, eta, p.live.attached);
+    }
+    if (att || c.energy_cWh != ce) {
+      draw_energy_row(i, ce, p.live.attached);
     }
 
     c.v_mV           = (uint16_t)cv;
@@ -209,10 +331,12 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
     c.w_mW           = cw;
     c.elapsed_s      = es;
     c.energy_cWh     = ce;
+    c.eta_s          = eta_minute_bucket;
     c.proto          = (uint8_t)p.live.proto;
     c.phase          = (uint8_t)p.phase;
     c.progress_pct   = prog.pct;
     c.progress_valid = prog.valid;
+    c.eta_valid      = eta.valid;
     c.attached       = p.live.attached;
     c.valid          = true;
   }
@@ -225,7 +349,7 @@ void DisplayUi::render(const PortSnapshot (&ports)[3], uint32_t total_mW,
              (unsigned long)(ct / 100), (unsigned long)(ct % 100));
     t.fillRect(kScreenW - kSummaryClearW, kBodyBottom + 2,
                kSummaryClearW, kScreenH - kBodyBottom - 2, kBgColor);
-    t.setTextColor(TFT_WHITE, kBgColor);
+    t.setTextColor(kValueColor, kBgColor);
     t.drawRightString(buf, kScreenW - kSummaryPadR, kBodyBottom + 4, 2);
     last_total_mW_ = ct;
   }

@@ -30,10 +30,12 @@ class DisplayUi {
     uint32_t w_mW;
     uint32_t elapsed_s;
     uint32_t energy_cWh;     // centi-Wh, matches the displayed precision
+    uint32_t eta_s;
     uint8_t  proto;
     uint8_t  phase;
     uint8_t  progress_pct;
     bool     progress_valid;
+    bool     eta_valid;
     bool     attached;
     bool     valid;
   };

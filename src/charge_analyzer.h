@@ -34,13 +34,32 @@ inline ChargeProgress charge_progress(uint16_t peak_i_mA, uint16_t now_i_mA,
   return {(uint8_t)pct, true};
 }
 
-inline const char* phase_name(Phase p) {
-  switch (p) {
-    case Phase::Idle:     return "Idle";
-    case Phase::CC:       return "Fast";
-    case Phase::CV:       return "Taper";
-    case Phase::NearDone: return "Almost";
-    case Phase::Done:     return "Done";
-  }
-  return "?";
+struct EtaSeconds {
+  uint32_t seconds;
+  bool     valid;
+};
+
+// Recent window 5s, older window 30s -> the two averages are 25s apart.
+static constexpr uint16_t kEtaWindowSpan_s    = 25;
+static constexpr size_t   kEtaRecentWindow_s  = 5;
+static constexpr size_t   kEtaOldWindow_s     = 30;
+
+// Estimate remaining time from the recent slope of i_mA. Returns invalid
+// when the current is steady (CC) or rising, when peak isn't established,
+// or when not in a tapering phase. Uses the 30s-old vs 5s-recent average
+// from PortHistory; the caller passes both already-computed values so
+// this stays unit-test friendly without depending on PortHistory.
+inline EtaSeconds eta_seconds(uint16_t now_i_mA, uint16_t avg_recent_mA,
+                              uint16_t avg_old_mA, Phase phase) {
+  if (phase == Phase::Idle || phase == Phase::Done) return {0, false};
+  if (avg_old_mA <= avg_recent_mA) return {0, false};
+  uint32_t drop_mA = avg_old_mA - avg_recent_mA;
+  // Below the +/-2% mock-noise floor the slope is just jitter.
+  if (drop_mA < 25) return {0, false};
+  uint32_t secs = (uint32_t)now_i_mA * kEtaWindowSpan_s / drop_mA;
+  // Beyond a few days the slope is noise-dominated; the UI also has no
+  // column width for h-counts that large.
+  if (secs > 99u * 3600u) return {0, false};
+  return {secs, true};
 }
+
