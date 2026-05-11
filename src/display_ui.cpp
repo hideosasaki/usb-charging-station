@@ -22,10 +22,10 @@ constexpr int16_t  kSummaryPadR   = 6;
 constexpr int16_t  kSummaryClearW = 140;
 // Material Dark on a black background. Greys/accents only — the surface
 // stays full black so the OLED-style contrast carries through.
-constexpr uint16_t kFrameColor = 0x39E7;  // outline #3A3A3A
-constexpr uint16_t kValueColor = 0xDF1C;  // on-surface #E0E0E0
+constexpr uint16_t kFrameColor = 0x39C7;  // outline #3A3A3A
+constexpr uint16_t kValueColor = 0xE71C;  // on-surface #E0E0E0
 constexpr uint16_t kSubColor   = 0xA514;  // on-surface-variant #A0A0A0
-constexpr uint16_t kAccentOk   = 0x07EE;  // green A400 #00E676
+constexpr uint16_t kAccentOk   = 0x8630;  // green 300 #81C784
 constexpr uint16_t kBgColor    = TFT_BLACK;
 
 constexpr int16_t kHeaderY    = 4;
@@ -54,11 +54,11 @@ int16_t col_width(uint8_t i) { return col_right(i) - col_left(i); }
 
 uint16_t proto_color(Protocol p) {
   switch (p) {
-    case Protocol::Std5V:   return 0x4DB4;  // teal 300 #4DB6AC
-    case Protocol::Qc20:    return 0xB30D;  // purple 300 #BA68C8
-    case Protocol::Qc30:    return 0x9ABA;  // deep purple 300 #9575CD
-    case Protocol::Pd20:    return 0x4E1F;  // light blue 300 #4FC3F7
-    case Protocol::Pd30:    return 0x65BC;  // blue 300 #64B5F6
+    case Protocol::Std5V:   return 0x4DB5;  // teal 300 #4DB6AC
+    case Protocol::Qc20:    return 0xBB59;  // purple 300 #BA68C8
+    case Protocol::Qc30:    return 0x93B9;  // deep purple 300 #9575CD
+    case Protocol::Pd20:    return 0x4E1E;  // light blue 300 #4FC3F7
+    case Protocol::Pd30:    return 0x65BE;  // blue 300 #64B5F6
     case Protocol::Pd31Pps: return 0x1FFF;  // cyan A200 #18FFFF
     case Protocol::None:    return kBgColor;
   }
