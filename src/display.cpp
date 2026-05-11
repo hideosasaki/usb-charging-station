@@ -1,5 +1,5 @@
-// ILI9341 driver wrapper. Pin assignment and TFT_eSPI options are defined
-// via build_flags in platformio.ini.
+// ILI9341 driver wrapper. Owns the single TFT_eSPI instance so the type
+// never escapes through display.h.
 
 #include "display.h"
 
@@ -32,7 +32,7 @@ void display_begin() {
   analogWrite(BL_PIN, 0);
 
   tft.init();
-  tft.setRotation(1);          // landscape, 320x240
+  tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
 
   backlight_fade_in();
@@ -43,10 +43,10 @@ void display_set_backlight(uint8_t pwm) {
 }
 
 void display_hello() {
-  const int16_t w = tft.width();   // 320 in landscape
-  const int16_t h = tft.height();  // 240 in landscape
+  const int16_t w = tft.width();
+  const int16_t h = tft.height();
 
-  // 1. Color bars: R / G / B / White. Reveals RGB vs BGR ordering.
+  // RGB bars reveal RGB-vs-BGR ordering issues at first boot.
   const int16_t bar_w = w / 4;
   tft.fillRect(0 * bar_w, 0, bar_w, h, TFT_RED);
   tft.fillRect(1 * bar_w, 0, bar_w, h, TFT_GREEN);
@@ -56,15 +56,13 @@ void display_hello() {
   delay(800);
   tft.fillScreen(TFT_BLACK);
 
-  // 2. Top-left origin marker (5x5 yellow). Confirms rotation/origin.
+  // Top-left origin marker confirms rotation/origin.
   tft.fillRect(0, 0, 5, 5, TFT_YELLOW);
 
-  // 3. Title and build stamp.
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.drawString("USB Charging Station", 10, 10, 4);
   tft.drawString("Built: " __DATE__ " " __TIME__, 10, 50, 2);
 
-  // 4. GFX primitives sanity (circle + line) in the lower-right area.
   tft.drawCircle(w - 40, h - 40, 25, TFT_CYAN);
   tft.drawLine(10, h - 10, w - 10, h - 10, TFT_MAGENTA);
 }

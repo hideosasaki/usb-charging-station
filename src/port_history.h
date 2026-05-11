@@ -7,11 +7,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// flags bits — keep one definition so producers (PortReader bridge) and
+// consumers (View) cannot drift apart on the bit layout.
+static constexpr uint8_t kFlagAttached = 0x01;
+static constexpr uint8_t kFlagError    = 0x02;
+
 struct HistorySample {
   uint16_t v_mV;
   uint16_t i_mA;
-  uint8_t  proto;     // Protocol enum value
-  uint8_t  flags;     // bit0 = attached, bit1 = error
+  uint8_t  proto;
+  uint8_t  flags;
   uint16_t reserved;
 };
 static_assert(sizeof(HistorySample) == 8,
