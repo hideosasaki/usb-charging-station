@@ -82,39 +82,37 @@ PortReading MockPortReader::sample_scenario(uint32_t now_ms) const {
 }
 
 PortReading MockPortReader::read(uint32_t now_ms) {
+  PortReading r{};
   if (has_override_) {
-    PortReading r{};
     r.t_ms     = now_ms;
     r.v_mV     = ov_v_mV_;
     r.i_mA     = ov_i_mA_;
     r.proto    = ov_proto_;
     r.err      = PortError::Ok;
     r.attached = true;
-    return r;
+  } else {
+    r = sample_scenario(now_ms);
+    if (force_ == Force::Detach) {
+      r.attached = false;
+      r.v_mV = r.i_mA = 0;
+      r.proto = Protocol::None;
+    } else {
+      if (force_ == Force::Attach && !r.attached) {
+        r.v_mV = 5000;
+        r.i_mA = 300;
+        r.proto = Protocol::Std5V;
+        r.attached = true;
+      }
+      if (r.attached && r.i_mA > 0) {
+        int32_t j = jitter_permille();
+        int32_t i = (int32_t)r.i_mA * (1000 + j) / 1000;
+        if (i < 0) i = 0;
+        if (i > 0xFFFF) i = 0xFFFF;
+        r.i_mA = (uint16_t)i;
+      }
+    }
   }
-
-  PortReading r = sample_scenario(now_ms);
-
-  if (force_ == Force::Detach) {
-    r.attached = false;
-    r.v_mV = r.i_mA = 0;
-    r.proto = Protocol::None;
-    return r;
-  }
-  if (force_ == Force::Attach && !r.attached) {
-    r.v_mV = 5000;
-    r.i_mA = 300;
-    r.proto = Protocol::Std5V;
-    r.attached = true;
-  }
-
-  if (r.attached && r.i_mA > 0) {
-    int32_t j = jitter_permille();
-    int32_t i = (int32_t)r.i_mA * (1000 + j) / 1000;
-    if (i < 0) i = 0;
-    if (i > 0xFFFF) i = 0xFFFF;
-    r.i_mA = (uint16_t)i;
-  }
+  last_ = r;
   return r;
 }
 
@@ -130,18 +128,25 @@ void MockPortReader::clear_override()      { has_override_ = false; }
 void MockPortReader::force_detach()        { force_ = Force::Detach; }
 void MockPortReader::force_attach()        { force_ = Force::Attach; }
 void MockPortReader::set_scenario(ScenarioId s) { scenario_ = s; force_ = Force::None; }
+void MockPortReader::resume_auto()              { has_override_ = false; force_ = Force::None; }
 
-PortReader* make_port_reader(uint8_t idx) {
-  // Per-port seeds keep the three jitter streams independent.
-  static MockPortReader r0(0, ScenarioId::A_Pd30Phone,   0xA51C3001u);
-  static MockPortReader r1(1, ScenarioId::B_Std5VSteady, 0xA51C3002u);
-  static MockPortReader r2(2, ScenarioId::C_IdleBurst,   0xA51C3003u);
+// Per-port seeds keep the three jitter streams independent. File-scope
+// so make_port_reader and make_mock_port_reader share the same instances.
+static MockPortReader g_r0(0, ScenarioId::A_Pd30Phone,   0xA51C3001u);
+static MockPortReader g_r1(1, ScenarioId::B_Std5VSteady, 0xA51C3002u);
+static MockPortReader g_r2(2, ScenarioId::C_IdleBurst,   0xA51C3003u);
+
+MockPortReader* make_mock_port_reader(uint8_t idx) {
   switch (idx) {
-    case 0: return &r0;
-    case 1: return &r1;
-    case 2: return &r2;
+    case 0: return &g_r0;
+    case 1: return &g_r1;
+    case 2: return &g_r2;
   }
   return nullptr;
+}
+
+PortReader* make_port_reader(uint8_t idx) {
+  return make_mock_port_reader(idx);
 }
 
 #endif  // USE_MOCK_PORTS

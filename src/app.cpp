@@ -6,12 +6,18 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
+#include "build_config.h"
 #include "charge_analyzer.h"
 #include "display.h"
 #include "display_ui.h"
 #include "port_history.h"
 #include "port_reader.h"
 #include "session_stats.h"
+
+#if USE_MOCK_PORTS
+#include "mock_port_reader.h"
+#include "serial_cmd.h"
+#endif
 
 namespace {
 
@@ -67,10 +73,20 @@ void app_setup() {
     session_reset(session[i]);
   }
   ui.begin();
+#if USE_MOCK_PORTS
+  static MockPortReader* mocks[3] = {make_mock_port_reader(0),
+                                     make_mock_port_reader(1),
+                                     make_mock_port_reader(2)};
+  serial_cmd_init(mocks);
+#endif
   Serial.println(F("app ready"));
 }
 
 void app_loop() {
+#if USE_MOCK_PORTS
+  serial_cmd_poll();
+#endif
+
   uint32_t now = millis();
   if (now - last_sample_ms < kSampleMs) return;
   last_sample_ms = now;

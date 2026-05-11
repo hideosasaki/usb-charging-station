@@ -25,6 +25,10 @@ class MockPortReader : public PortReader {
   PortReading read(uint32_t now_ms) override;
   uint8_t     index() const override { return idx_; }
 
+  // Last value returned by read(). Lets status-style introspection avoid
+  // re-running the scenario (which would advance the RNG side-effect).
+  PortReading last_reading() const { return last_; }
+
   // Runtime overrides used by the Serial command parser. set_override pins
   // the port to a fixed reading until clear_override() is called.
   void set_override(uint16_t v_mV, uint16_t i_mA, Protocol proto);
@@ -32,6 +36,9 @@ class MockPortReader : public PortReader {
   void force_detach();
   void force_attach();
   void set_scenario(ScenarioId scenario);
+  // Drop any override / force flag so the scenario function fully
+  // governs the next read.
+  void resume_auto();
 
  private:
   PortReading sample_scenario(uint32_t now_ms) const;
@@ -48,4 +55,10 @@ class MockPortReader : public PortReader {
 
   enum class Force : uint8_t { None, Detach, Attach };
   Force force_ = Force::None;
+
+  PortReading last_{};
 };
+
+// Mock-specific accessor for the same static instances exposed by
+// make_port_reader(). Returns nullptr for idx > 2.
+MockPortReader* make_mock_port_reader(uint8_t idx);

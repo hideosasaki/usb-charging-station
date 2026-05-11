@@ -66,7 +66,7 @@ void draw_frame() {
   t.drawFastVLine(2 * kColW, 0, kBodyBottom, kFrameColor);
   for (uint8_t i = 0; i < 3; ++i) {
     char hdr[8];
-    snprintf(hdr, sizeof(hdr), "Port%u", (unsigned)(i + 1));
+    snprintf(hdr, sizeof(hdr), "Port%u", (unsigned)i);
     t.setTextColor(TFT_WHITE, kBgColor);
     t.drawString(hdr, col_left(i), kHeaderY, 2);
   }
