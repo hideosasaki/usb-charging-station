@@ -7,3 +7,10 @@
 #ifndef USE_MOCK_PORTS
 #define USE_MOCK_PORTS 1
 #endif
+
+// How many SW3518 ports are physically wired. Used only when
+// USE_MOCK_PORTS=0; make_port_reader() returns nullptr for indices
+// at or above this count.
+#ifndef SW3518_PORT_COUNT
+#define SW3518_PORT_COUNT 1
+#endif
