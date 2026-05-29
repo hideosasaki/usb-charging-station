@@ -8,7 +8,7 @@
 
 namespace {
 
-constexpr uint8_t  BL_PIN          = 15;
+constexpr uint8_t  BL_PIN          = 28;
 constexpr uint32_t BL_PWM_HZ       = 20000;   // above audible range
 constexpr uint8_t  BL_TARGET       = 26;      // ~10% duty (~40 mA total)
 constexpr uint16_t BL_FADE_MS      = 300;
