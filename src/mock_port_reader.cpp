@@ -17,7 +17,7 @@ struct Nominal {
   uint16_t v_mV;
   uint16_t i_c_mA;
   uint16_t i_a_mA;
-  Protocol proto;     // USB-C side; A is implicitly Std5V
+  Protocol proto;     // chip-wide, like the real SW3518 indicator
 };
 
 Nominal single_c(uint16_t v_mV, uint16_t i_mA, Protocol proto) {

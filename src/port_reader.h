@@ -34,7 +34,8 @@ struct PortReading {
   uint16_t  v_mV;       // shared Vbus across both rails
   uint16_t  i_c_mA;     // USB-C rail current
   uint16_t  i_a_mA;     // USB-A rail current
-  Protocol  proto;      // applies to the USB-C rail; USB-A is implicit Std5V
+  Protocol  proto;      // chip-wide: either rail can fast-charge when it is
+                        // the only one attached; dual attach forces 5V
   PortError err;
   uint8_t   rail_mask;  // bit0=C attached, bit1=A attached
 

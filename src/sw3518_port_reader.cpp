@@ -16,7 +16,6 @@ namespace {
 
 using SW35xx_lib::SW35xx;
 
-constexpr uint16_t kAttachedVThreshold_mV = 4500;
 constexpr uint16_t kAttachedIThreshold_mA = 50;
 
 Protocol map_protocol(SW35xx::FastChargeInfo info, bool attached,
@@ -74,14 +73,26 @@ PortReading Sw3518PortReader::read(uint32_t now_ms) {
   r.v_mV   = v_mV;
   r.i_c_mA = i_c_mA;
   r.i_a_mA = i_a_mA;
-  // Vbus is shared, so a healthy 5V+ rail with no measurable current is
-  // ambiguous between the two connectors. Bias toward USB-C, which is the
-  // negotiable side; the A flag fires only when actual current is seen.
-  r.set_rail(Rail::UsbC,
-             v_mV >= kAttachedVThreshold_mV ||
-             i_c_mA >= kAttachedIThreshold_mA);
-  r.set_rail(Rail::UsbA, i_a_mA >= kAttachedIThreshold_mA);
-  r.proto = map_protocol(fc, r.has_c(), v_mV);
+  // Vbus idles at 5V even with nothing plugged in, so voltage says
+  // nothing about attachment. The chip's device-present status (System
+  // Status 1) is the primary source; current is OR'ed in as a backstop
+  // because the chip's own A-side detection has a high attach threshold
+  // (~80 mA) and the status decode can come back Unknown on a bad read.
+  bool presence_c = false, presence_a = false;
+  switch (chip_.getPresenceStatus()) {
+    case SW35xx::PresenceStatus::AC_C:    presence_c = true; break;
+    case SW35xx::PresenceStatus::AC_A:    presence_a = true; break;
+    case SW35xx::PresenceStatus::AC_Both: presence_c = presence_a = true; break;
+    case SW35xx::PresenceStatus::AC_None:
+    default:  // AA-mode codes / Unknown: fall back to current alone
+      break;
+  }
+  r.set_rail(Rail::UsbC, presence_c || i_c_mA >= kAttachedIThreshold_mA);
+  r.set_rail(Rail::UsbA, presence_a || i_a_mA >= kAttachedIThreshold_mA);
+  // The fast-charge indicator is chip-wide, not per-connector: the A port
+  // negotiates QC/FCP/etc. over D+/D- when it is the only one attached,
+  // so the protocol applies to whichever rail(s) are live.
+  r.proto = map_protocol(fc, r.attached(), v_mV);
 
   // The vendored driver returns 0 on I2C read error, so a dead bus
   // looks identical to an idle port. Best we can do: assume the bus

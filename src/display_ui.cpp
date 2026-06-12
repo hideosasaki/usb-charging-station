@@ -188,9 +188,9 @@ void draw_pill(uint8_t col, Protocol proto, bool attached) {
   draw_pill_at(col, kPillY, protocol_name(proto), proto_color(proto));
 }
 
-// Label for a rail-tagged pill: "Type-C PROTO" / "Type-A 5V". The rail
+// Label for a rail-tagged pill: "Type-C PROTO" / "Type-A PROTO". The rail
 // prefix tells the user which connector this row represents when both
-// rails are active.
+// rails are active (where the chip-wide protocol is 5V for both anyway).
 void draw_rail_pill(uint8_t col, int16_t y, Rail rail, Protocol proto,
                     bool attached) {
   if (!attached) {
