@@ -358,15 +358,13 @@ LED ライト、のような混在運用で個別に Phase を出すため:
 
 ### Phase 0: 環境構築
 
-ソフト基盤とリモート開発インフラの整備。SW3518 到着前に着手可能な範囲を完了させる。
+ソフト基盤の整備。SW3518 到着前に着手可能な範囲を完了させる。
 
-**ソフト・リモート開発インフラ(完了済み 2026-05-09)**
+**ソフト基盤(完了済み 2026-05-09)**
 - PlatformIO プロジェクト雛形作成 (`platformio.ini`, `src/main.cpp`, `Makefile`)
 - Arduino-Pico (Earle Philhower) で RP2040-Zero 内蔵 WS2812B (GP16) の R/G/B 1Hz Blink + Serial 出力を実装
-- リモート開発インフラ構築: **Mac でビルド → Pi Zero W (USB 中継) → RP2040-Zero に書き込み**(詳細は [`docs/remote-dev-setup.md`](remote-dev-setup.md))
-  - Mac は USB ケーブルで縛られず、Wi-Fi 経由で `make upload` / `make serial` できる
-  - 初回のみ物理 BOOT ボタン必須、以降は 1200bps touch で自動 BOOTSEL 遷移
-- 検証完了 (E1〜E6): ビルド → Pi 経由書き込み → シリアル出力受信 → ボタン無し再書き込み
+- 書き込みは Mac 直結 USB + picotool (`make upload`)。初回のみ物理 BOOT ボタン必須、以降は 1200bps touch で自動 BOOTSEL 遷移
+- 検証完了: ビルド → 書き込み → シリアル出力受信 → ボタン無し再書き込み
 
 **部品発注(進行中)**
 - SW3518 モジュール、HW-681、その他部品
@@ -385,10 +383,6 @@ LED ライト、のような混在運用で個別に Phase を出すため:
 
 - **`build_flags` に `-DUSE_TINYUSB` を入れない**: Earle Philhower コアはデフォルトで USB CDC 対応、`USE_TINYUSB` を入れると CDC が enumerate されず picotool 含め接続不能になる
 - **Waveshare RP2040-Zero の USB PID は起動中も BOOTSEL も `0x0003`**: 区別は `iProduct` 文字列(`"RP2 Boot"` / `"RP2040 Zero"`)、または `bInterfaceClass`(MSC+VendorSpec / CDC)
-- **Raspberry Pi OS Bullseye / Pi Zero W (ARMv6) では `picotool` を apt で入れられない**: pico-sdk 2.0.0 + cmake からソースビルド(20〜30 分、一回限り)。`PICOTOOL_FLAT_INSTALL=1` で `/usr/local/picotool/picotool` に入るので `/usr/local/bin/picotool` へシンボリックリンク必要
-- **Bullseye のデフォルト構成では `cdc_acm` カーネルモジュールが自動 load されない**: `/etc/modules-load.d/cdc_acm.conf` に `cdc_acm` を書く
-- **udev rule は `ATTRS{idVendor}` ではなく `ENV{ID_VENDOR_ID}` で書く**: Bullseye の `tty` サブシステムでは `ATTRS` の親デバイス walk が効かなかった
-- **socat の `crnl` オプションは削除**: 出力バッファリング遅延の原因になる
 
 ### Phase 1: 液晶単体動作
 

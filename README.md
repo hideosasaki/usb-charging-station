@@ -22,13 +22,13 @@ Mock firmware (the default) runs without any SW3518 chip wired up,
 so you can iterate on the display layout, mock scenarios, and analyzers:
 
 ```bash
-make build
-pio run -t upload
-pio device monitor
+make upload
+make serial
 ```
 
-`pio run -t upload` will use PlatformIO's USB upload path. As an
-alternative you can drag `firmware.uf2` onto the BOOTSEL drive.
+`make upload` flashes over USB with picotool; `make serial` opens
+`pio device monitor`. As an alternative you can drag `firmware.uf2`
+onto the BOOTSEL drive.
 
 SW3518 firmware switches `make_port_reader()` to the real driver.
 Requires at least SW3518 #1 wired to GP0=SDA / GP1=SCL:

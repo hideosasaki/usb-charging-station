@@ -21,9 +21,7 @@ they disagree.
   file. The same applies to Japanese phrases in code comments: keep
   source comments English-only.
 - This repository is public. Do not commit personal hostnames, IPs,
-  usernames, or LAN domain names. Per-machine values live in `.env`
-  (gitignored); committed examples (`.env.example`, `.ssh-config.example`)
-  use neutral placeholders.
+  usernames, or LAN domain names.
 - Do not write phase numbers, status, or implementation-progress notes
   ("Phase 0 done", "Status: WIP") in README or source. Such information
   rots quickly and the README is not the source of truth for state.
