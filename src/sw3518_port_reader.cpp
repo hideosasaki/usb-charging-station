@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#include "pio_i2c_wrapper.h"
 #include "wire_i2c_wrapper.h"
 
 namespace {
@@ -114,12 +115,23 @@ namespace {
 WireI2CWrapper      g_bus0(Wire, /*sda=*/0, /*scl=*/1, /*clock_hz=*/100000);
 Sw3518PortReader    g_p0(0, g_bus0);
 
+// HW I2C #1 on GP2=SDA, GP3=SCL.
+WireI2CWrapper      g_bus1(Wire1, /*sda=*/2, /*scl=*/3, /*clock_hz=*/100000);
+Sw3518PortReader    g_p1(1, g_bus1);
+
+// PIO I2C on GP4=SDA, GP5=SCL — both hardware controllers are in use,
+// so the third chip gets a PIO state machine bus.
+PioI2CWrapper       g_bus2(/*sda=*/4, /*scl=*/5);
+Sw3518PortReader    g_p2(2, g_bus2);
+
 }  // namespace
 
 PortReader* make_port_reader(uint8_t idx) {
   if (idx >= SW3518_PORT_COUNT) return nullptr;
   switch (idx) {
     case 0: return &g_p0;
+    case 1: return &g_p1;
+    case 2: return &g_p2;
     default: return nullptr;
   }
 }

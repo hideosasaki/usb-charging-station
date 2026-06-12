@@ -441,12 +441,26 @@ LED ライト、のような混在運用で個別に Phase を出すため:
 - 2 ポート分の値を液晶に表示
 - 表示レイアウトを 3 ポート用に拡張(#3 は未接続表示)
 
+ソフト側は実装済み (2026-06-12)。`WireI2CWrapper` で `Wire1` を
+GP2/GP3 に割り当て、`make_port_reader(1)` が SW3518 #2 を返す。
+
 ### Phase 4: 3 ポート構成 (HW I²C ×2 + PIO I²C ×1)
 
 - SW3518 #3 を PIO I²C (GP4/GP5) に接続
 - PioI2CWrapper.h を実装(dimitar 版 I2CInterface 適合)
 - 3 ポート完全表示
 - クロックストレッチ動作の検証
+
+ソフト側は実装済み (2026-06-12)。実機でのクロックストレッチ検証は未了。
+
+- pico-examples の PIO I²C を `lib/PioI2C/` に vendoring
+  (BSD-3-Clause、出典コミットは ORIGIN.md に記録)。SCL 立ち上がり後の
+  `wait 1 pin` でクロックストレッチに対応、NAK は PIO IRQ フラグで検出
+- `PioI2CWrapper` (`src/pio_i2c_wrapper.h`) が I2CInterface 適合。
+  begin() で空き PIO ステートマシンを確保し GP4/GP5 を 100 kHz で駆動。
+  PIO プログラムの制約で SCL は SDA の次の GPIO 固定 (GP4/GP5 は適合)
+- `waveshare_rp2040_zero_hw` env を `SW3518_PORT_COUNT=3` に変更、
+  `make_port_reader(2)` が SW3518 #3 を返す
 
 ### Phase 5: リングバッファとフェーズ判定
 
