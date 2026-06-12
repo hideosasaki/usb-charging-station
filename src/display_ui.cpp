@@ -103,9 +103,11 @@ uint16_t proto_color(Protocol p) {
   return kBgColor;
 }
 
-void draw_frame() {
+// Static chrome (column dividers, port headers). Idempotent: redrawing
+// over an intact frame changes no pixels, so refresh() can call it on
+// every repair cycle without visible flicker.
+void draw_static_frame() {
   auto& t = display_tft();
-  t.fillScreen(kBgColor);
   t.drawFastVLine(kColW,     0, kBodyBottom, kFrameColor);
   t.drawFastVLine(2 * kColW, 0, kBodyBottom, kFrameColor);
   for (uint8_t i = 0; i < 3; ++i) {
@@ -114,10 +116,6 @@ void draw_frame() {
     t.setTextColor(kValueColor, kBgColor);
     t.drawString(hdr, col_left(i), kHeaderY, 2);
   }
-}
-
-void clear_row(uint8_t col, int16_t y, int16_t h) {
-  display_tft().fillRect(col_left(col), y, col_width(col), h, kBgColor);
 }
 
 // Wipe everything below the "Port N" header. Used on a layout switch
@@ -412,7 +410,18 @@ void DisplayUi::begin() {
     g_row_sprite->setColorDepth(16);
     g_row_sprite->createSprite(kMaxRowW, kMaxRowH);
   }
-  draw_frame();
+  display_tft().fillScreen(kBgColor);
+  refresh();
+}
+
+// Repaint path for panel-glitch recovery: redraw the static chrome and
+// drop the diff cache so the next render() repaints every field. No
+// fillScreen — erasing the whole panel here would flash visibly when
+// the panel is healthy, so background regions outside the repainted
+// field rects are left untouched (a power-glitched panel may keep
+// noise there until the next layout change).
+void DisplayUi::refresh() {
+  draw_static_frame();
   for (auto& c : last_) c.valid = false;
   last_total_mW_ = 0xFFFFFFFFu;
 }

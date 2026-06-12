@@ -184,5 +184,10 @@ void app_loop() {
 
   if (now - last_sample_ms >= kSampleMs) sample_tick(now);
 
+  // Flaky panel wiring can drop SPI or panel power for a moment; the
+  // periodic blind repair restores the panel config and, once a cycle
+  // completes, forces a full repaint.
+  if (display_repair_tick(now)) ui.refresh();
+
   ui.render(g_snap, g_total_mW, now);
 }

@@ -28,6 +28,9 @@ struct PortSnapshot {
 class DisplayUi {
  public:
   void begin();
+  // Redraws the static frame and invalidates the diff cache so the next
+  // render() repaints every field. Called after a display repair cycle.
+  void refresh();
   void render(const PortSnapshot (&ports)[3], uint32_t total_mW,
               uint32_t now_ms);
 
